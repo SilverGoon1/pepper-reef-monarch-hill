@@ -10,7 +10,13 @@ export function InviteQr({ value, label }: { value: string; label: string }) {
     }
   }, [value]);
 
-  if (!drawn) return <p className="ed-sub">Could not draw a QR code for this link.</p>;
+  if (!drawn) {
+    return (
+      <p className="ed-sub">
+        QR could not be drawn for this link. Use the secret key below in your authenticator app.
+      </p>
+    );
+  }
 
   return (
     <svg

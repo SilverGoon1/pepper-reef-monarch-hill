@@ -59,6 +59,7 @@ export function verifyTotp(secret: string, code: string) {
 }
 
 export function totpUri(secret: string, account: string) {
-  const label = encodeURIComponent(`South End Pizza:${account}`);
-  return `otpauth://totp/${label}?secret=${secret}&issuer=South%20End%20Pizza&digits=6&period=30`;
+  // Keep otpauth URI short: qr.ts currently caps ~106 bytes (v1–6 ECC M).
+  const label = encodeURIComponent(`SEP:${account}`);
+  return `otpauth://totp/${label}?secret=${secret}&issuer=SEP&digits=6&period=30`;
 }
