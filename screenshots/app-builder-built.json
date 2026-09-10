@@ -1,0 +1,40 @@
+{
+  "url": "http://127.0.0.1:8081/",
+  "viewports": {
+    "desktop": {
+      "width": 1280,
+      "height": 800,
+      "status": 200,
+      "title": "South End Pizza III",
+      "hasCanvas": false,
+      "bodyTextLen": 1329,
+      "bodyTextHash": "3958af8af443f83d9215451cfb935bd72d99b3217a6aa7aa7ea8f919eab47706",
+      "bodyTextPrefix": "Skip to content EGG HARBOR TOWNSHIP South End Pizza III Cart Sou",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/app-builder-built.png"
+    },
+    "mobile": {
+      "width": 390,
+      "height": 844,
+      "status": 200,
+      "title": "South End Pizza III",
+      "hasCanvas": false,
+      "bodyTextLen": 754,
+      "bodyTextHash": "98f53beeea5bcbd5e0fce632431a4b30a2aed1672cc4248ed7fd82ef7a6cb0b5",
+      "bodyTextPrefix": "Skip to content South End Pizza III Cart South End Pizza III Egg",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/app-builder-built-mobile.png"
+    }
+  },
+  "brandWarnings": [],
+  "authWarnings": [],
+  "verdictFile": "/workspace/screenshots/app-builder-built.json",
+  "divergesFromBaseline": true,
+  "baselineReasons": [
+    "mobile: body text replaced (similar length, page start changed)"
+  ]
+}

@@ -1,0 +1,38 @@
+{
+  "url": "http://127.0.0.1:8080/",
+  "viewports": {
+    "desktop": {
+      "width": 1280,
+      "height": 800,
+      "status": 200,
+      "title": "South End Pizza III",
+      "hasCanvas": false,
+      "bodyTextLen": 1226,
+      "bodyTextHash": "a66dcbe2712c75883c972aa82ae3b2ff25d52250c12ca4147d80a937abd465be",
+      "bodyTextPrefix": "Skip to content EGG HARBOR TOWNSHIP South End Pizza III Order Ac",
+      "horizontalOverflow": false,
+      "consoleErrors": [
+        "A tree hydrated but some attributes of the server rendered HTML didn't match the client properties. This won't be patched up. This can happen if a SSR-ed Client Component used:\n\n- A server/client branch `if (typeof window !== 'undefined')`.\n- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.\n- Date formatting in a user's locale which doesn't match the server.\n- External changing data without sending a snapshot of it along with the HTML.\n- Invalid HTML tag nesting.\n\nIt can also happen if the client has a browser extension installed which messes with the HTML before React loaded.\n\n%s%s https://react.dev/link/hydration-mismatch \n\n  ...\n    <Suspense fallback={<Context>}>\n      <CatchBoundary getResetKey={function getResetKey} errorComponent={function AppErrorComponent} ...>\n        <SafeFragment fallback={function fallback}>\n          <MatchInnerImpl match={{id:\"//\",ssr:true, ...}}>\n            <Lazy>\n              <Home>\n                <div className=\"shop-shell\">\n                  <ShopHeader>\n                  <main className=\"shop-main\" id=\"main\">\n                    <Storefront restaurant={{name:\"Sout...\", ...}} categories={[...]} settings={{...}} profile={null}>\n                      <div className=\"store-layout\">\n                        <div className=\"store-main\">\n                          <section>\n                          <div>\n                          <div className=\"cat-search...\" ref={{current:null}}>\n                            <div className=\"cat-search...\">\n                              <label className=\"cat-search\">\n                                <Search>\n                                <input\n                                  value=\"\"\n                                  onChange={function onChange}\n                                  onFocus={function onFocus}\n                                  placeholder=\"Search the menu\"\n                                  aria-label=\"Search the menu\"\n                                  autoComplete=\"off\"\n                                  enterKeyHint=\"search\"\n-                                 style={{caret-color:\"transparent\"}}\n                                >\n                            ...\n                          ...\n                        ...\n"
+      ],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/full-check-home.png"
+    },
+    "mobile": {
+      "width": 390,
+      "height": 844,
+      "status": 200,
+      "title": "South End Pizza III",
+      "hasCanvas": false,
+      "bodyTextLen": 937,
+      "bodyTextHash": "bff7abb59de8b5932e7d4b2e58a82a02d406734126d524b7148f06570d12cce7",
+      "bodyTextPrefix": "Skip to content EGG HARBOR TOWNSHIP South End Pizza III Order Ac",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/full-check-home-mobile.png"
+    }
+  },
+  "brandWarnings": [],
+  "authWarnings": [],
+  "verdictFile": "/workspace/screenshots/full-check-home.json"
+}

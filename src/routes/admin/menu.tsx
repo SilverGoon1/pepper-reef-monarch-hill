@@ -1,0 +1,337 @@
+import { useEffect, useState } from "react";
+import { createFileRoute } from "@tanstack/react-router";
+import { MenuEditor } from "@/components/menu-editor";
+import { CardEditor } from "@/components/card-editor";
+import { MenuBoard } from "@/components/menu-board";
+import { PrinterSetup } from "@/components/printer-setup";
+import { ZoneMap } from "@/components/zone-map";
+import {
+  DeliveryPanel,
+  HoursPanel,
+  PaymentsPanel,
+  TaxPanel,
+  ToppingPricePanel,
+  VacationPanel,
+} from "@/components/shop-ops-panels";
+import { SaveToast, useSaveFlash } from "@/components/save-toast";
+import { useMenuStore, type EditableCategory } from "@/lib/menu-store";
+import { getAdminShop, saveDeliveryZone, saveShopMenu, saveShopSettings } from "@/lib/shop-server";
+import {
+  DEFAULT_RECEIPT_OPTIONS,
+  type PrinterProfile,
+  type ReceiptOptions,
+  type ShopSettingsPublic,
+} from "@/lib/shop-types";
+import type { RestaurantInfo } from "@/data/menu";
+
+const TABS = ["menu", "cards", "hours", "payments", "tax", "delivery", "printers"] as const;
+type MenuTab = (typeof TABS)[number];
+
+export const Route = createFileRoute("/admin/menu")({
+  validateSearch: (search: Record<string, unknown>): { tab?: MenuTab } => {
+    const raw = typeof search.tab === "string" ? search.tab : undefined;
+    const tab = raw === "vacation" ? "hours" : raw;
+    const ok = tab && TABS.includes(tab as MenuTab) ? (tab as MenuTab) : undefined;
+    return ok ? { tab: ok } : {};
+  },
+  component: AdminMenu,
+});
+
+function AdminMenu() {
+  const { tab: wanted } = Route.useSearch();
+  const tab: MenuTab = wanted ?? "menu";
+  const [msg, setMsg] = useState("");
+  const [settings, setSettings] = useState<ShopSettingsPublic | null>(null);
+  const [printers, setPrinters] = useState<PrinterProfile[]>([]);
+  const [receipt, setReceipt] = useState<ReceiptOptions>(DEFAULT_RECEIPT_OPTIONS);
+  const [printerStamp, setPrinterStamp] = useState("");
+  const [cells, setCells] = useState<string[]>([]);
+  const [restaurant, setRestaurant] = useState<RestaurantInfo | null>(null);
+  const { toast, flashOk, flashFail } = useSaveFlash();
+  const navigate = Route.useNavigate();
+
+  useEffect(() => {
+    void useMenuStore.persist.rehydrate();
+    void getAdminShop().then((d) => {
+      useMenuStore.getState().replaceAll({
+        restaurant: d.restaurant,
+        footer: d.footer,
+        categories: d.categories as EditableCategory[],
+        cardTextSize: d.settings.cardTextSize,
+        cardTextColor: d.settings.cardTextColor,
+        cardDescColor: d.settings.cardDescColor,
+        cardPriceColor: d.settings.cardPriceColor,
+        cardSize: d.settings.cardSize,
+        cardBg: d.settings.cardBg,
+        tagline: d.settings.tagline,
+        showMark: d.settings.showMark,
+      });
+      setSettings(d.settings);
+      setRestaurant(d.restaurant);
+      setPrinters(d.printers);
+      setReceipt(d.receiptOptions);
+      setPrinterStamp(JSON.stringify({ printers: d.printers, receipt: d.receiptOptions }));
+      setCells(d.cells);
+    });
+  }, []);
+
+  function go(next: MenuTab) {
+    void navigate({ to: "/admin/menu", search: next === "menu" ? {} : { tab: next } });
+  }
+
+  function saveOps(data: Record<string, unknown>, ok = "Saved.") {
+    void saveShopSettings({ data })
+      .then(() => {
+        setMsg(ok);
+        flashOk(true);
+      })
+      .catch((e) => {
+        const text = e instanceof Error ? e.message : "Could not save";
+        setMsg(text);
+        flashFail(text);
+      });
+  }
+
+  return (
+    <div className="menu-ops-page">
+      <SaveToast toast={toast} />
+      <div className="page-card">
+        <h1>Menu & shop details</h1>
+        <p className="ed-sub">Menu, cards, hours, payments, tax, delivery, and printers — each tab saves on its own.</p>
+        <div className="seg center-tabs menu-ops-tabs" role="tablist" aria-label="Menu and shop details">
+          {(
+            [
+              ["menu", "Menu"],
+              ["cards", "Card Editor"],
+              ["hours", "Hours"],
+              ["payments", "Payments"],
+              ["tax", "Tax"],
+              ["delivery", "Delivery"],
+              ["printers", "Printers"],
+            ] as const
+          ).map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              role="tab"
+              aria-selected={tab === id}
+              data-on={tab === id}
+              onClick={() => go(id)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {tab === "menu" ? (
+        <div className="admin-menu-grid">
+          <div>
+            <div className="page-card">
+              <button
+                type="button"
+                className="btn-print"
+                onClick={() => {
+                  const snap = useMenuStore.getState();
+                  const nextRestaurant = { ...snap.restaurant, shortName: snap.restaurant.name };
+                  void Promise.all([
+                    saveShopMenu({
+                      data: { restaurant: nextRestaurant, footer: snap.footer, categories: snap.categories },
+                    }),
+                    saveShopSettings({
+                      data: {
+                        tagline: snap.tagline,
+                        showMark: snap.showMark,
+                        toppingPriceSm: settings?.toppingPriceSm,
+                        toppingPriceMd: settings?.toppingPriceMd,
+                        toppingPriceLg: settings?.toppingPriceLg,
+                        toppingPriceXl: settings?.toppingPriceXl,
+                      },
+                    }),
+                  ])
+                    .then(() => {
+                      setRestaurant(nextRestaurant);
+                      setMsg("Prices and shop details are live.");
+                      flashOk(true);
+                    })
+                    .catch((e) => setMsg(e instanceof Error ? e.message : "Could not save"));
+                }}
+              >
+                Save all
+              </button>
+              {msg ? <p className="ed-sub">{msg}</p> : null}
+            </div>
+            {settings ? <ToppingPricePanel settings={settings} setSettings={setSettings} /> : null}
+            <MenuEditor />
+          </div>
+          <div className="preview-wrap">
+            <MenuBoard paper="letter" showDesc={false} />
+          </div>
+        </div>
+      ) : null}
+
+      {tab !== "menu" && tab !== "cards" && !settings ? <div className="page-skel">Loading…</div> : null}
+
+      {tab === "cards" ? (
+        <div className="settings-page">
+          <CardEditor />
+          <button
+            type="button"
+            className="btn-print"
+            onClick={() => {
+              const snap = useMenuStore.getState();
+              saveOps(
+                {
+                  cardTextSize: snap.cardTextSize,
+                  cardTextColor: snap.cardTextColor,
+                  cardDescColor: snap.cardDescColor,
+                  cardPriceColor: snap.cardPriceColor,
+                  cardSize: snap.cardSize,
+                  cardBg: snap.cardBg,
+                },
+                "Card style is live.",
+              );
+            }}
+          >
+            Save cards
+          </button>
+          {msg ? <p className="ed-sub">{msg}</p> : null}
+        </div>
+      ) : null}
+
+      {tab === "hours" && settings ? (
+        <div className="settings-page">
+          <HoursPanel settings={settings} setSettings={setSettings} />
+          <VacationPanel settings={settings} setSettings={setSettings} />
+          <button
+            type="button"
+            className="btn-print"
+            onClick={() =>
+              saveOps(
+                {
+                  weeklyHours: settings.weeklyHours,
+                  prepMinutes: settings.prepMinutes,
+                  deliveryMinutes: settings.deliveryMinutes,
+                  vacationOn: settings.vacationOn,
+                  vacationMessage: settings.vacationMessage,
+                  vacationUntil: settings.vacationUntil,
+                },
+                "Hours and vacation are live.",
+              )
+            }
+          >
+            Save hours
+          </button>
+          {msg ? <p className="ed-sub">{msg}</p> : null}
+        </div>
+      ) : null}
+
+      {tab === "payments" && settings ? (
+        <div className="settings-page">
+          <PaymentsPanel settings={settings} setSettings={setSettings} />
+          <button
+            type="button"
+            className="btn-print"
+            onClick={() =>
+              saveOps(
+                {
+                  paymentPlaceholder: settings.paymentPlaceholder,
+                  guestCardRequired: settings.guestCardRequired,
+                },
+                "Payment settings are live.",
+              )
+            }
+          >
+            Save payments
+          </button>
+          {msg ? <p className="ed-sub">{msg}</p> : null}
+        </div>
+      ) : null}
+
+      {tab === "tax" && settings ? (
+        <div className="settings-page">
+          <TaxPanel settings={settings} setSettings={setSettings} />
+          <button
+            type="button"
+            className="btn-print"
+            onClick={() => saveOps({ taxRate: settings.taxRate }, "Tax rate is live.")}
+          >
+            Save tax
+          </button>
+          {msg ? <p className="ed-sub">{msg}</p> : null}
+        </div>
+      ) : null}
+
+      {tab === "delivery" && settings ? (
+        <div className="settings-page">
+          <DeliveryPanel settings={settings} setSettings={setSettings} />
+          <section className="page-card">
+            <h2>Delivery zone</h2>
+            <p className="ed-sub">
+              Paint the blocks you cover. Customer checkout geocodes the address and only allows delivery inside the
+              painted area. Use the search to confirm a street, then paint it.
+            </p>
+            <ZoneMap cells={cells} onChange={setCells} />
+          </section>
+          <button
+            type="button"
+            className="btn-print"
+            onClick={() => {
+              void Promise.all([
+                saveShopSettings({
+                  data: {
+                    minOrderDelivery: settings.minOrderDelivery,
+                    deliveryFee: settings.deliveryFee,
+                    deliveryMinutes: settings.deliveryMinutes,
+                  },
+                }),
+                saveDeliveryZone({ data: { cells } }),
+              ])
+                .then(([, zone]) => {
+                  setSettings({ ...settings, hasZones: cells.length > 0 });
+                  setMsg(`Delivery settings are live. Saved ${zone.count} blocks.`);
+                  flashOk(true);
+                })
+                .catch((e) => {
+                  const text = e instanceof Error ? e.message : "Could not save";
+                  setMsg(text);
+                  flashFail(text);
+                });
+            }}
+          >
+            Save delivery
+          </button>
+          {msg ? <p className="ed-sub">{msg}</p> : null}
+        </div>
+      ) : null}
+
+      {tab === "printers" && settings && restaurant ? (
+        <div className="settings-page">
+          <PrinterSetup
+            printers={printers}
+            setPrinters={setPrinters}
+            receipt={receipt}
+            setReceipt={setReceipt}
+            restaurant={restaurant}
+            taxRate={settings.taxRate}
+            onSave={() => {
+              const stamp = JSON.stringify({ printers, receipt });
+              if (stamp === printerStamp) {
+                flashOk(false);
+                return;
+              }
+              void saveShopSettings({ data: { printers, receiptOptions: receipt } })
+                .then(() => {
+                  setPrinterStamp(stamp);
+                  flashOk(true);
+                  setMsg("Printer setup is live.");
+                })
+                .catch((e) => flashFail(e instanceof Error ? e.message : "Printers were not saved."));
+            }}
+          />
+          {msg ? <p className="ed-sub">{msg}</p> : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}

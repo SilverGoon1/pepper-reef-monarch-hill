@@ -1,0 +1,41 @@
+import { useEffect, useState } from "react";
+import { DEFAULT_LOGO, DEFAULT_LOGO_SM, SHOP_LOGO_EVENT } from "@/lib/admin-nav";
+
+type MarkVariant = "stamp" | "hero" | "login" | "mast" | "settings";
+
+const SMALL = new Set<MarkVariant>(["stamp", "mast"]);
+
+export function BrandMark({
+  variant = "stamp",
+  className = "",
+}: {
+  variant?: MarkVariant;
+  className?: string;
+}) {
+  const compact = SMALL.has(variant);
+  const fallback = compact ? DEFAULT_LOGO_SM : DEFAULT_LOGO;
+  const [src, setSrc] = useState(fallback);
+
+  useEffect(() => {
+    const sync = () => {
+      const custom = document.documentElement.dataset.shopLogo || "";
+      setSrc(custom || fallback);
+    };
+    sync();
+    window.addEventListener(SHOP_LOGO_EVENT, sync);
+    return () => window.removeEventListener(SHOP_LOGO_EVENT, sync);
+  }, [fallback]);
+
+  return (
+    <span className={`brand-mark brand-mark-${variant} ${className}`.trim()}>
+      <img
+        src={src}
+        alt="South End Pizza III — a chicken riding a buffalo"
+        width={compact ? 192 : 800}
+        height={compact ? 192 : 800}
+        decoding="async"
+        fetchPriority={variant === "hero" || variant === "stamp" ? "high" : "low"}
+      />
+    </span>
+  );
+}

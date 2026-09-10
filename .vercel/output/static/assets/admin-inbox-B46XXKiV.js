@@ -1,0 +1,1 @@
+var e=`southend-admin-inbox`;function t(t){typeof window>`u`||window.dispatchEvent(new CustomEvent(e,{detail:Math.max(0,Math.round(t))}))}function n(t){if(typeof window>`u`)return()=>{};let n=e=>{let n=e.detail;typeof n==`number`&&Number.isFinite(n)&&t(n)};return window.addEventListener(e,n),()=>window.removeEventListener(e,n)}export{n,t};

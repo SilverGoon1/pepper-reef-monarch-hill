@@ -1,0 +1,36 @@
+{
+  "url": "http://127.0.0.1:8080/pair-printer",
+  "viewports": {
+    "desktop": {
+      "width": 1280,
+      "height": 800,
+      "status": 200,
+      "title": "South End Pizza III",
+      "hasCanvas": false,
+      "bodyTextLen": 128,
+      "bodyTextHash": "dd4aa86f8176c1c576708b6bf2e307542bcea53397c5da858749d4bf9355538b",
+      "bodyTextPrefix": "PRINTER PAIRING Connect the printer Use Chrome or Edge on the sh",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/pair-printer.png"
+    },
+    "mobile": {
+      "width": 390,
+      "height": 844,
+      "status": 200,
+      "title": "South End Pizza III",
+      "hasCanvas": false,
+      "bodyTextLen": 128,
+      "bodyTextHash": "dd4aa86f8176c1c576708b6bf2e307542bcea53397c5da858749d4bf9355538b",
+      "bodyTextPrefix": "PRINTER PAIRING Connect the printer Use Chrome or Edge on the sh",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/pair-printer-mobile.png"
+    }
+  },
+  "brandWarnings": [],
+  "authWarnings": [],
+  "verdictFile": "/workspace/screenshots/pair-printer.json"
+}
