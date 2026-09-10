@@ -16,4 +16,5 @@ export function requireNeonInProduction() {
 export const PRODUCTION_AUTH_ORIGINS = [
   "https://southendpizza.app",
   "https://www.southendpizza.app",
+  "https://southendpizza.vercel.app",
 ] as const;
