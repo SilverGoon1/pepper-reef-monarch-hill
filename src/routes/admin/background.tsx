@@ -15,6 +15,7 @@ function AdminBackground() {
   const [logoPreview, setLogoPreview] = useState("");
   const [notify, setNotify] = useState("");
   const [season, setSeason] = useState<SeasonEffect>("none");
+  const [adminTotpRequired, setAdminTotpRequired] = useState(false);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const [previewAspect, setPreviewAspect] = useState("16 / 9");
@@ -28,6 +29,7 @@ function AdminBackground() {
         setLogoPreview(d.settings.logoData || DEFAULT_LOGO);
         setNotify(d.notifyAudio || "");
         setSeason(sanitizeSeasonEffect(d.settings.seasonEffect));
+        setAdminTotpRequired(Boolean(d.settings.adminTotpRequired));
       })
       .catch((e) => setMsg(e instanceof Error ? e.message : "Could not load"));
   }, []);
@@ -91,11 +93,43 @@ function AdminBackground() {
         <p className="shop-brand-kicker">Admin</p>
         <h1>Settings</h1>
         <p className="ed-sub">
-          Swap the website icon, the full-page backdrop, seasonal effects, and the incoming-order alarm. The icon
-          shows in the header, login, and browser tab. The backdrop covers the screen at the visitor’s window size,
-          faded so the menu stays readable.
+          Swap the website icon, the full-page backdrop, seasonal effects, and the incoming-order alarm. Desk
+          authenticator for Admin is optional here.
         </p>
       </header>
+      <section className="page-card">
+        <h2>Desk security</h2>
+        <p className="ed-sub">
+          Off by default. When this is on, Admin must enroll an authenticator app before POS and the rest of the desk
+          open. Personal 2FA on Account still works either way.
+        </p>
+        <label className="pay-opt">
+          <input
+            type="checkbox"
+            checked={adminTotpRequired}
+            disabled={busy}
+            onChange={(e) => {
+              const next = e.target.checked;
+              setBusy(true);
+              setMsg("");
+              void saveShopSettings({ data: { adminTotpRequired: next } })
+                .then(() => {
+                  setAdminTotpRequired(next);
+                  setMsg(
+                    next
+                      ? "Admin must use an authenticator before the desk opens."
+                      : "Admin authenticator is optional.",
+                  );
+                })
+                .catch((err) => {
+                  setMsg(err instanceof Error ? err.message : "Could not save");
+                })
+                .finally(() => setBusy(false));
+            }}
+          />
+          Require authenticator for Admin
+        </label>
+      </section>
       <section className="page-card">
         <h2>Website icon</h2>
         <p className="ed-sub">This is the stamp customers see next to the shop name.</p>

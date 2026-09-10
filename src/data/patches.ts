@@ -7,11 +7,19 @@ export type PatchEntry = {
 
 export const PATCHES: PatchEntry[] = [
   {
+    id: "2026-09-10-admin-totp-toggle",
+    date: "September 10, 2026",
+    title: "Admin authenticator is optional",
+    added: [
+      "Admin can open the desk without an authenticator. Require it anytime under Admin → Settings → Desk security.",
+    ],
+  },
+  {
     id: "2026-09-10-security-bot-access",
     date: "September 10, 2026",
     title: "Desk security and bot access",
     added: [
-      "Shop Admin password lives only in host secrets now, and Admin must enroll an authenticator before the desk opens.",
+      "Shop Admin password lives only in host secrets now.",
       "Live card capture is frozen — checkout is cash or pay at pickup until a real processor is wired.",
       "Bots get their own tokens under Admin → Bot access, with least-privilege scopes and a one-time copy.",
     ],

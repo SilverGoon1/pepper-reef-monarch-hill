@@ -48,11 +48,11 @@ function AccountPage() {
   return (
     <div className="shop-shell">
       <SessionGate>
-        {({ profile }) => (
+        {({ profile, twoFactor }) => (
           <>
             <ShopHeader profile={profile} />
             <main className="shop-main account-main" id="main">
-              <AccountBody profile={profile} tab={asTab(tab)} />
+              <AccountBody profile={profile} totpLocked={twoFactor.locked} tab={asTab(tab)} />
             </main>
           </>
         )}
@@ -61,7 +61,7 @@ function AccountPage() {
   );
 }
 
-function AccountBody({ profile, tab }: { profile: ProfileView; tab: AccountTab }) {
+function AccountBody({ profile, totpLocked, tab }: { profile: ProfileView; totpLocked: boolean; tab: AccountTab }) {
   const navigate = useNavigate();
   const add = useCartStore((s) => s.add);
   const setNotes = useCartStore((s) => s.setNotes);
@@ -449,8 +449,11 @@ function AccountBody({ profile, tab }: { profile: ProfileView; tab: AccountTab }
               2FA — not SMS.
             </p>
             {totpOn ? (
-              profile.role === "admin" ? (
-                <p className="ed-sub">Shop admin two-factor stays on. You can rotate the authenticator from a new enrollment after a verified session.</p>
+              totpLocked ? (
+                <p className="ed-sub">
+                  Settings requires shop admin two-factor. Turn that off under Admin → Settings if you want to drop the
+                  authenticator, or rotate it by enrolling a new key after a verified session.
+                </p>
               ) : (
               <form
                 className="login-form"

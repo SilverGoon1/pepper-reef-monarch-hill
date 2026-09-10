@@ -93,8 +93,8 @@ function Enroll2fa() {
         <p className="shop-brand-kicker">Shop desk</p>
         <h1>Set up two-factor</h1>
         <p className="ed-sub">
-          Admin requires an authenticator app (Google Authenticator, Authy, 1Password). Scan the code or type the key,
-          then enter a 6-digit code to confirm.
+          Scan with an authenticator app (Google Authenticator, Authy, 1Password), or type the key, then enter a
+          6-digit code to confirm.
         </p>
         {uri ? <InviteQr value={uri} label="Authenticator QR code" /> : null}
         {secret ? <code className="totp-secret">{secret}</code> : <p className="ed-sub">Preparing a key…</p>}

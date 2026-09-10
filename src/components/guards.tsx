@@ -117,7 +117,7 @@ export function SessionGate({
     return (
       <div className="page-card">
         <h1>Set up two-factor</h1>
-        <p>Shop admin needs an authenticator app before the desk can open.</p>
+        <p>Settings requires an authenticator app before the desk can open.</p>
         <Link to="/enroll-2fa" search={{ next: pathname }} className="btn-print">
           Enroll authenticator
         </Link>

@@ -589,6 +589,7 @@ async function applySettingsSchema(sql: Sql) {
 	await sql.query(`alter table shop_settings add column if not exists card_text_color text not null default 'ink'`);
 	await sql.query(`alter table menu_items add column if not exists condiments jsonb not null default '[]'::jsonb`);
 	await sql.query(`alter table shop_settings add column if not exists guest_card_required boolean not null default false`);
+	await sql.query(`alter table shop_settings add column if not exists admin_totp_required boolean not null default false`);
 	await sql.query(`alter table shop_settings add column if not exists card_desc_color text not null default 'muted'`);
 	await sql.query(`alter table shop_settings add column if not exists card_price_color text not null default 'ink'`);
 	await sql.query(`alter table shop_settings add column if not exists card_size text not null default 'md'`);
@@ -704,6 +705,7 @@ function publicSettings(row: Record<string, unknown>, hasZones: boolean): ShopSe
 		vacationUntil: String(row.vacation_until ?? ""),
 		paymentPlaceholder: String(row.payment_placeholder ?? ""),
 		guestCardRequired: bool(row.guest_card_required),
+		adminTotpRequired: bool(row.admin_totp_required),
 		pointsPerDollar: num(row.points_per_dollar) || 1,
 		redeemRate: Math.max(1, Math.round(num(row.redeem_rate) || 100)),
 		welcomeBonus: Math.round(num(row.welcome_bonus)),
@@ -1207,13 +1209,14 @@ export const getTwoFactorStatus = createServerFn({ method: "GET" }).middleware([
 	await ensureProfile(sql, context.userId);
 	const profile = (await sql`select totp_enabled, role from profiles where user_id = ${context.userId}`)[0];
 	const email = String((await sql.query(`select email from "user" where id = $1 limit 1`, [context.userId]))[0]?.email ?? "");
-	const locked = profile?.role === "admin" || isStaffAdminAccount(context.userId, email);
+	const isAdmin = profile?.role === "admin" || isStaffAdminAccount(context.userId, email);
+	const shopRequires = isAdmin && bool((await loadSettingsRow(sql)).admin_totp_required);
 	const enabled = bool(profile?.totp_enabled);
-	if (locked && !enabled) {
+	if (shopRequires && !enabled) {
 		return { required: true, unlocked: false, enabled: false, enroll: true, locked: true };
 	}
 	if (!enabled) {
-		return { required: false, unlocked: true, enabled: false, enroll: false, locked: false };
+		return { required: false, unlocked: true, enabled: false, enroll: false, locked: shopRequires };
 	}
 	const exp = (await sql`select expires_at from two_factor_unlocks where user_id = ${context.userId}`)[0]?.expires_at;
 	const unlocked = Boolean(exp && new Date(String(exp)).getTime() > Date.now());
@@ -1222,7 +1225,7 @@ export const getTwoFactorStatus = createServerFn({ method: "GET" }).middleware([
 		unlocked,
 		enabled: true,
 		enroll: false,
-		locked,
+		locked: shopRequires,
 	};
 });
 export const startTotpSetup = createServerFn({ method: "POST" }).middleware([authMiddleware]).handler(async ({ context }) => {
@@ -1276,7 +1279,9 @@ export const disableTotp = createServerFn({ method: "POST" }).middleware([authMi
 	const email = String((await sql.query(`select email from "user" where id = $1 limit 1`, [context.userId]))[0]?.email ?? "");
 	const role = String((await sql`select role from profiles where user_id = ${context.userId}`)[0]?.role ?? "");
 	if (role === "admin" || isStaffAdminAccount(context.userId, email)) {
-		throw new Error("Shop admin two-factor stays on.");
+		if (bool((await loadSettingsRow(sql)).admin_totp_required)) {
+			throw new Error("Shop admin two-factor is required in Settings.");
+		}
 	}
 	const rows = await sql`select totp_secret from profiles where user_id = ${context.userId}`;
 	if (!rows[0]?.totp_secret || !verifyTotp(String(rows[0].totp_secret), String(data.code || ""))) throw new Error("That code did not match.");
@@ -1287,7 +1292,9 @@ export const disableTotp = createServerFn({ method: "POST" }).middleware([authMi
 async function assertTwoFactor(sql: Sql, userId: string) {
 	const profile = (await sql`select totp_enabled, role from profiles where user_id = ${userId}`)[0];
 	const email = String((await sql.query(`select email from "user" where id = $1 limit 1`, [userId]))[0]?.email ?? "");
-	const must = bool(profile?.totp_enabled) || profile?.role === "admin" || isStaffAdminAccount(userId, email);
+	const isAdmin = profile?.role === "admin" || isStaffAdminAccount(userId, email);
+	const shopRequires = isAdmin && bool((await loadSettingsRow(sql)).admin_totp_required);
+	const must = bool(profile?.totp_enabled) || shopRequires;
 	if (!must) return;
 	if (!bool(profile?.totp_enabled)) throw new Error("Two-factor enrollment required.");
 	const exp = (await sql`select expires_at from two_factor_unlocks where user_id = ${userId}`)[0]?.expires_at;
@@ -1595,6 +1602,7 @@ export const saveShopSettings = createServerFn({ method: "POST" }).middleware([a
 	add("vacation_until", data.vacationUntil);
 	add("payment_placeholder", data.paymentPlaceholder);
 	add("guest_card_required", data.guestCardRequired);
+	add("admin_totp_required", data.adminTotpRequired);
 	add("points_per_dollar", data.pointsPerDollar);
 	add("redeem_rate", data.redeemRate === void 0 ? void 0 : Math.round(data.redeemRate));
 	add("welcome_bonus", data.welcomeBonus === void 0 ? void 0 : Math.round(data.welcomeBonus));

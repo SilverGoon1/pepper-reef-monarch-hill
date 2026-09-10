@@ -180,6 +180,7 @@ export type ShopSettingsPublic = {
   vacationUntil: string;
   paymentPlaceholder: string;
   guestCardRequired: boolean;
+  adminTotpRequired: boolean;
   pointsPerDollar: number;
   redeemRate: number;
   welcomeBonus: number;
