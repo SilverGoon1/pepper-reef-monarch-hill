@@ -3,7 +3,7 @@ import { C as require_jsx_runtime, U as require_react, y as Link } from "../_lib
 import { g as getMe } from "./shop-server-MBWgsS8d.mjs";
 import { t as useCurrentUserState } from "./use-current-user-Q8r4NahO.mjs";
 import { h as Share, p as Smartphone } from "../_libs/lucide-react.mjs";
-import { x as ShopHeader } from "./router-BdhSMl-o.mjs";
+import { x as ShopHeader } from "./router-CXnXlITz.mjs";
 //#region node_modules/.nitro/vite/services/ssr/assets/install-bOLbXrQA.js
 var import_react = /* @__PURE__ */ __toESM(require_react());
 var import_jsx_runtime = require_jsx_runtime();

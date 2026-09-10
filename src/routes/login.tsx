@@ -59,10 +59,7 @@ function Login() {
     e.preventDefault();
     setError("");
     setBusy(true);
-    const parsed =
-      mode === "phone"
-        ? identifierToEmail(identifier)
-        : { email: identifier.trim().toLowerCase(), phone: undefined as string | undefined };
+    const parsed = identifierToEmail(identifier);
     if (mode === "phone" && !parsed.phone) {
       setBusy(false);
       setError("Enter a 10-digit US phone number.");
@@ -70,7 +67,7 @@ function Login() {
     }
     if (mode === "email" && !parsed.email.includes("@")) {
       setBusy(false);
-      setError("Enter a valid email.");
+      setError("Enter a valid email or the shop username.");
       return;
     }
     if (tab === "up" && password.length < 8) {
@@ -126,7 +123,7 @@ function Login() {
         <p className="ed-sub">
           {next === "/checkout"
             ? "Sign in to place your order, or go back and check out as a guest. Your cart stays on this device."
-            : "Use email or a US phone number plus a password. Google and X work too."}
+            : "Use email, the shop username, or a US phone number plus a password. Google and X work too."}
         </p>
         <div className="seg" role="group" aria-label="Identifier type">
           <button type="button" data-on={mode === "email"} onClick={() => setMode("email")}>
@@ -152,14 +149,14 @@ function Login() {
             </label>
           ) : null}
           <label className="ed-field">
-            <span>{mode === "phone" ? "Phone" : "Email"}</span>
+            <span>{mode === "phone" ? "Phone" : "Email or username"}</span>
             <input
               className="ed-input"
               value={identifier}
               onChange={(e) => setIdentifier(e.target.value)}
-              autoComplete={mode === "phone" ? "tel" : "email"}
+              autoComplete={mode === "phone" ? "tel" : "username"}
               inputMode={mode === "phone" ? "tel" : "email"}
-              placeholder={mode === "phone" ? "(609) 555-0100" : "you@email.com"}
+              placeholder={mode === "phone" ? "(609) 555-0100" : "Admin or you@email.com"}
               required
             />
           </label>

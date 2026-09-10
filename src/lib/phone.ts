@@ -1,3 +1,5 @@
+import { isStaffAdminUsername, STAFF_ADMIN_EMAIL } from "@/lib/staff-admin";
+
 export function digitsOnly(value: string) {
   return value.replace(/\D/g, "");
 }
@@ -20,11 +22,12 @@ export function formatPhone(value: string) {
   return `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}`;
 }
 
-/** Map an email or US phone into the Better Auth email identifier. */
+/** Map an email, shop username, or US phone into the Better Auth email identifier. */
 export function identifierToEmail(raw: string) {
   const trimmed = raw.trim();
   const phone = toTenDigitPhone(trimmed);
   if (phone) return { email: `${phone}@phone.southend.pizza`, phone };
+  if (isStaffAdminUsername(trimmed)) return { email: STAFF_ADMIN_EMAIL, phone: undefined as string | undefined };
   return { email: trimmed.toLowerCase(), phone: undefined as string | undefined };
 }
 

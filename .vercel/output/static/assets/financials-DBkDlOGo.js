@@ -1,0 +1,1 @@
+import{t as e}from"./index-CqH-fnZK.js";var t=e;export{t as component};

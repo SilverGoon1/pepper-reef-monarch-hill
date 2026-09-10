@@ -5,7 +5,7 @@ import { i as signOut } from "./client-B40BzJxt.mjs";
 import { t as ADMIN_NAV } from "./brand-mark-DrSWcYOk.mjs";
 import { h as getAdminShop, p as getAdminInboxCount, t as acceptOrder, w as listIncomingOrders } from "./shop-server-MBWgsS8d.mjs";
 import { N as LogOut, i as Volume2, j as Menu, r as VolumeX, rt as Bell, t as X } from "../_libs/lucide-react.mjs";
-import { D as onAdminInbox, O as onVisibleInterval, x as ShopHeader } from "./router-BdhSMl-o.mjs";
+import { D as onAdminInbox, O as onVisibleInterval, x as ShopHeader } from "./router-CXnXlITz.mjs";
 import { t as SessionGate } from "./guards-BhjYrEpq.mjs";
 //#region node_modules/.nitro/vite/services/ssr/assets/admin-DmVcie-h.js
 var import_react = /* @__PURE__ */ __toESM(require_react());

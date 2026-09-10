@@ -7,6 +7,14 @@ export type PatchEntry = {
 
 export const PATCHES: PatchEntry[] = [
   {
+    id: "2026-09-10-staff-admin",
+    date: "September 10, 2026",
+    title: "Shop admin sign-in",
+    added: [
+      "Sign in with username Admin to open POS, the menu editor, and the rest of the shop desk.",
+    ],
+  },
+  {
     id: "2026-09-10-guest-header-align",
     date: "September 10, 2026",
     title: "A cleaner guest title bar",
