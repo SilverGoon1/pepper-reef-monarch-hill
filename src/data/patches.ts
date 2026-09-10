@@ -7,6 +7,15 @@ export type PatchEntry = {
 
 export const PATCHES: PatchEntry[] = [
   {
+    id: "2026-09-10-style-custom-bots",
+    date: "September 10, 2026",
+    title: "Style bot + custom bot minting",
+    added: [
+      "Admin → Bot access includes a Style preset (menu/health read) and a New Customer preset.",
+      "Custom mode lets you mint any future bot by name and role without another code drop.",
+    ],
+  },
+  {
     id: "2026-09-10-admin-totp-toggle",
     date: "September 10, 2026",
     title: "Admin authenticator is optional",

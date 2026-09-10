@@ -1,3 +1,17 @@
+/**
+ * Bot API v1 — South End Pizza
+ *
+ * Changelog (POS quality-up):
+ * - GET /orders/recent: adds itemCount, itemSummary, customerName, notes, tip
+ *   (nullable-safe). Joins profiles for display name; items come from orders.items jsonb.
+ *   Existing fields (id, ticketNo, status, fulfillment, total, paymentMethod,
+ *   createdAt, scheduledFor) are unchanged.
+ * - POST /orders/status: accepting/preparing is idempotent — if the ticket is
+ *   already accepted, preparing, or further along the kitchen path, returns 200
+ *   with the current state (no error spam). Other transitions still update normally.
+ *
+ * Scope: build-only. No Neon cutover, auth/BETTER_AUTH, card processor, or bot scope changes.
+ */
 import { createFileRoute } from "@tanstack/react-router";
 import { writeBotAudit, requestIp } from "@/lib/bot/audit.server";
 import { agentHasScope, rateLimitBot, verifyBotBearer, type BotAgent } from "@/lib/bot/tokens.server";
@@ -134,25 +148,70 @@ async function handle(request: Request) {
       agentId = gate.agent.id;
       const sql = await getSql();
       const rows = await sql`
-        select id, ticket_no, status, fulfillment, total, payment_method, created_at, scheduled_for
-        from orders
-        order by created_at desc
+        select o.id, o.ticket_no, o.status, o.fulfillment, o.total, o.payment_method,
+               o.created_at, o.scheduled_for, o.notes, o.tip, o.items, o.pickup_name,
+               p.display_name
+        from orders o
+        left join profiles p on p.user_id = o.user_id
+        order by o.created_at desc
         limit 25`;
       return reply({
-        orders: rows.map((row) => ({
-          id: String(row.id),
-          ticketNo: Math.round(Number(row.ticket_no) || 0),
-          status: String(row.status ?? ""),
-          fulfillment: String(row.fulfillment ?? ""),
-          total: String(row.total ?? "0"),
-          paymentMethod: String(row.payment_method ?? ""),
-          createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : String(row.created_at ?? ""),
-          scheduledFor: row.scheduled_for
-            ? row.scheduled_for instanceof Date
-              ? row.scheduled_for.toISOString()
-              : String(row.scheduled_for)
-            : null,
-        })),
+        orders: rows.map((row) => {
+          const itemsRaw = row.items;
+          let items: unknown[] = [];
+          if (Array.isArray(itemsRaw)) items = itemsRaw;
+          else if (typeof itemsRaw === "string") {
+            try {
+              const parsed = JSON.parse(itemsRaw);
+              if (Array.isArray(parsed)) items = parsed;
+            } catch {
+              items = [];
+            }
+          }
+          let itemCount = 0;
+          const bits: string[] = [];
+          for (const raw of items) {
+            const it = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+            const qty = Math.max(1, Math.round(Number(it.qty) || 1));
+            itemCount += qty;
+            const name = String(it.name ?? "").trim() || "Item";
+            const size = String(it.size ?? "").trim();
+            bits.push(size ? `${qty}× ${name} · ${size}` : `${qty}× ${name}`);
+          }
+          const tipRaw = row.tip;
+          const tip =
+            tipRaw === null || tipRaw === undefined || tipRaw === ""
+              ? null
+              : String(tipRaw);
+          const notesRaw = row.notes;
+          const notes =
+            notesRaw === null || notesRaw === undefined
+              ? null
+              : String(notesRaw).trim() || null;
+          const customerName =
+            String(row.display_name ?? "").trim() ||
+            String(row.pickup_name ?? "").trim() ||
+            "Guest";
+          return {
+            id: String(row.id),
+            ticketNo: Math.round(Number(row.ticket_no) || 0),
+            status: String(row.status ?? ""),
+            fulfillment: String(row.fulfillment ?? ""),
+            total: String(row.total ?? "0"),
+            paymentMethod: String(row.payment_method ?? ""),
+            createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : String(row.created_at ?? ""),
+            scheduledFor: row.scheduled_for
+              ? row.scheduled_for instanceof Date
+                ? row.scheduled_for.toISOString()
+                : String(row.scheduled_for)
+              : null,
+            itemCount,
+            itemSummary: bits.slice(0, 6).join(", ") + (bits.length > 6 ? "…" : ""),
+            customerName,
+            notes,
+            tip,
+          };
+        }),
       });
     }
 
@@ -210,6 +269,31 @@ async function handle(request: Request) {
       if (!id) return reply({ error: "missing_id" }, 400);
       if (!KITCHEN_STATUSES.has(next)) return reply({ error: "invalid_status" }, 400);
       const sql = await getSql();
+      const existing = await sql.query(
+        `select id, ticket_no, status from orders where id = $1`,
+        [id],
+      );
+      if (!existing[0]) return reply({ error: "not_found" }, 404);
+      const current = String(existing[0].status ?? "");
+      const pastAccepted = new Set(["accepted", "preparing", "ready", "out_for_delivery", "completed"]);
+      const pastPreparing = new Set(["preparing", "ready", "out_for_delivery", "completed"]);
+      // Idempotent accept/preparing: already there (or further) → 200 current state, no error spam.
+      if (next === "accepted" && pastAccepted.has(current)) {
+        return reply({
+          ok: true,
+          id: String(existing[0].id),
+          ticketNo: Math.round(Number(existing[0].ticket_no) || 0),
+          status: current,
+        });
+      }
+      if (next === "preparing" && pastPreparing.has(current)) {
+        return reply({
+          ok: true,
+          id: String(existing[0].id),
+          ticketNo: Math.round(Number(existing[0].ticket_no) || 0),
+          status: current,
+        });
+      }
       const updated = await sql.query(
         `update orders set status = $1, accepted_at = case when $1 in ('accepted','preparing') then coalesce(accepted_at, now()) else accepted_at end
          where id = $2 returning id, ticket_no, status`,

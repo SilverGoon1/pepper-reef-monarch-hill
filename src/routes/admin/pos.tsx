@@ -451,7 +451,19 @@ function AdminPos() {
     return hits.slice(0, 8);
   }, [categories, itemQuery]);
 
-  const openTickets = useMemo(() => visible.filter((t) => posBucket(t.status) !== "completed"), [visible]);
+  const openTickets = useMemo(() => {
+    const open = visible.filter((t) => posBucket(t.status) !== "completed");
+    // Stable kitchen order: placed/awaiting first (oldest first), then accepted+ (oldest first).
+    return [...open].sort((a, b) => {
+      const ap = a.status === "placed" || a.status === "awaiting_payment" ? 0 : 1;
+      const bp = b.status === "placed" || b.status === "awaiting_payment" ? 0 : 1;
+      if (ap !== bp) return ap - bp;
+      const ta = Date.parse(a.createdAt) || 0;
+      const tb = Date.parse(b.createdAt) || 0;
+      if (ta !== tb) return ta - tb;
+      return (a.ticketNo || 0) - (b.ticketNo || 0) || a.id.localeCompare(b.id);
+    });
+  }, [visible]);
   const doneTickets = useMemo(() => visible.filter((t) => posBucket(t.status) === "completed"), [visible]);
   const shown = desk === "done" ? doneTickets : openTickets;
   const openTicket = tickets.find((t) => t.id === openId) ?? null;

@@ -29,11 +29,21 @@ export type BotPreset = {
   scopes?: readonly BotScope[];
 };
 
+export const BOT_ROLE_LABELS: Record<BotRole, string> = {
+  security_read: "Security read",
+  ops_read: "Ops read",
+  menu_write: "Menu write",
+  orders_read: "Orders read",
+  admin_write: "Admin write",
+};
+
 export const BOT_PRESETS: BotPreset[] = [
   { name: "security-guard", role: "security_read", label: "Security Guard" },
   { name: "chief-of-staff", role: "ops_read", label: "Chief of Staff" },
   { name: "finance", role: "orders_read", label: "Finance", scopes: ["orders.read", "payments.read"] },
   { name: "pos", role: "orders_read", label: "POS Employee" },
+  { name: "style", role: "ops_read", label: "Style", scopes: ["health.read", "menu.read"] },
+  { name: "new-customer", role: "ops_read", label: "New Customer", scopes: ["health.read", "menu.read", "orders.read"] },
 ];
 
 export function isBotScope(raw: string): raw is BotScope {

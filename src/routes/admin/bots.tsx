@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { Copy } from "lucide-react";
-import { BOT_PRESETS } from "@/lib/bot/scopes";
+import { BOT_PRESETS, BOT_ROLES, BOT_ROLE_LABELS, type BotRole } from "@/lib/bot/scopes";
 import {
   createBotAgent,
   listBotAgents,
@@ -15,10 +15,15 @@ import { formatShopWhen } from "@/lib/hours";
 
 export const Route = createFileRoute("/admin/bots")({ component: AdminBots });
 
+type CreateMode = "preset" | "custom";
+
 function AdminBots() {
   const [agents, setAgents] = useState<BotAgentView[]>([]);
   const [audit, setAudit] = useState<BotAuditView[]>([]);
+  const [mode, setMode] = useState<CreateMode>("preset");
   const [preset, setPreset] = useState(BOT_PRESETS[0]?.name ?? "security-guard");
+  const [customName, setCustomName] = useState("");
+  const [customRole, setCustomRole] = useState<BotRole>("ops_read");
   const [busy, setBusy] = useState("");
   const [msg, setMsg] = useState("");
   const [issued, setIssued] = useState<{ name: string; token: string } | null>(null);
@@ -40,6 +45,32 @@ function AdminBots() {
     void navigator.clipboard.writeText(token).then(() => setMsg("Token copied. Store it as a bot secret — it will not be shown again."));
   }
 
+  function onCreated(r: { agent: BotAgentView; token: string }) {
+    setIssued({ name: r.agent.name, token: r.token });
+    setAgents((list) => [...list.filter((a) => a.id !== r.agent.id), r.agent].sort((a, b) => a.name.localeCompare(b.name)));
+  }
+
+  function createPreset() {
+    setBusy("create");
+    setMsg("");
+    void createBotAgent({ data: { preset } })
+      .then(onCreated)
+      .catch((e) => setMsg(e instanceof Error ? e.message : "Could not create bot"))
+      .finally(() => setBusy(""));
+  }
+
+  function createCustom() {
+    setBusy("create");
+    setMsg("");
+    void createBotAgent({ data: { name: customName.trim().toLowerCase(), role: customRole } })
+      .then((r) => {
+        onCreated(r);
+        setCustomName("");
+      })
+      .catch((e) => setMsg(e instanceof Error ? e.message : "Could not create bot"))
+      .finally(() => setBusy(""));
+  }
+
   return (
     <div className="settings-page">
       <header className="page-card">
@@ -47,45 +78,77 @@ function AdminBots() {
         <h1>Bot access</h1>
         <p className="ed-sub">
           Each bot gets its own token and the least scopes it needs. Bots never sign in as Admin. The raw token is
-          shown once — copy it into the bot’s secret store, then treat it like a password.
+          shown once — copy it into the bot’s secret store, then treat it like a password. Use a preset for known
+          desk roles, or Custom to mint any future agent by name and role.
         </p>
       </header>
 
       <section className="page-card">
         <h2>Create an agent</h2>
-        <div className="two-col">
-          <label className="ed-field">
-            <span>Preset</span>
-            <select className="ed-input" value={preset} onChange={(e) => setPreset(e.target.value)}>
-              {BOT_PRESETS.map((p) => (
-                <option key={p.name} value={p.name}>
-                  {p.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <div className="ed-field">
-            <span>Issue</span>
-            <button
-              type="button"
-              className="btn-print"
-              disabled={Boolean(busy)}
-              onClick={() => {
-                setBusy("create");
-                setMsg("");
-                void createBotAgent({ data: { preset } })
-                  .then((r) => {
-                    setIssued({ name: r.agent.name, token: r.token });
-                    setAgents((list) => [...list.filter((a) => a.id !== r.agent.id), r.agent].sort((a, b) => a.name.localeCompare(b.name)));
-                  })
-                  .catch((e) => setMsg(e instanceof Error ? e.message : "Could not create bot"))
-                  .finally(() => setBusy(""));
-              }}
-            >
-              {busy === "create" ? "Creating…" : "Create token"}
-            </button>
-          </div>
+        <div className="seg" role="tablist" aria-label="Create mode" style={{ marginBottom: 12 }}>
+          <button type="button" className="seg-btn" data-on={mode === "preset" ? "true" : "false"} onClick={() => setMode("preset")}>
+            Preset
+          </button>
+          <button type="button" className="seg-btn" data-on={mode === "custom" ? "true" : "false"} onClick={() => setMode("custom")}>
+            Custom
+          </button>
         </div>
+
+        {mode === "preset" ? (
+          <div className="two-col">
+            <label className="ed-field">
+              <span>Preset</span>
+              <select className="ed-input" value={preset} onChange={(e) => setPreset(e.target.value)}>
+                {BOT_PRESETS.map((p) => (
+                  <option key={p.name} value={p.name}>
+                    {p.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="ed-field">
+              <span>Issue</span>
+              <button type="button" className="btn-print" disabled={Boolean(busy)} onClick={createPreset}>
+                {busy === "create" ? "Creating…" : "Create token"}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="two-col">
+            <label className="ed-field">
+              <span>Name</span>
+              <input
+                className="ed-input"
+                value={customName}
+                placeholder="style"
+                autoComplete="off"
+                onChange={(e) => setCustomName(e.target.value)}
+              />
+              <span className="ed-sub">2–40 chars: letters, numbers, dashes</span>
+            </label>
+            <label className="ed-field">
+              <span>Role</span>
+              <select className="ed-input" value={customRole} onChange={(e) => setCustomRole(e.target.value as BotRole)}>
+                {BOT_ROLES.map((role) => (
+                  <option key={role} value={role}>
+                    {BOT_ROLE_LABELS[role]}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="ed-field">
+              <span>Issue</span>
+              <button
+                type="button"
+                className="btn-print"
+                disabled={Boolean(busy) || customName.trim().length < 2}
+                onClick={createCustom}
+              >
+                {busy === "create" ? "Creating…" : "Create token"}
+              </button>
+            </div>
+          </div>
+        )}
         {issued ? (
           <div className="bot-token-box">
             <p className="ed-sub">

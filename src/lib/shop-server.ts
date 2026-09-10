@@ -872,20 +872,28 @@ async function ensureStaffAdmin(sql: Sql) {
 }
 
 async function ensureProfile(sql: Sql, userId: string, displayName?: string) {
-	const inflight = profileLocks.get(userId);
-	if (inflight) {
-		await inflight;
+	// Serialize per-user inserts so POS boot (getMe + getTwoFactorStatus) cannot race
+	// into profiles_pkey. Waiters re-check after the inflight settles — if the first
+	// attempt failed before insert, we still create the row instead of returning empty.
+	for (let spin = 0; spin < 4; spin += 1) {
+		const inflight = profileLocks.get(userId);
+		if (inflight) {
+			await inflight.catch(() => undefined);
+			if ((await sql`select user_id from profiles where user_id = ${userId} limit 1`).length) return;
+			continue;
+		}
+		const run = ensureProfileRow(sql, userId, displayName).finally(() => {
+			profileLocks.delete(userId);
+		});
+		profileLocks.set(userId, run);
+		await run;
 		return;
 	}
-	const run = ensureProfileRow(sql, userId, displayName).finally(() => {
-		profileLocks.delete(userId);
-	});
-	profileLocks.set(userId, run);
-	await run;
+	await ensureProfileRow(sql, userId, displayName);
 }
 
 async function ensureProfileRow(sql: Sql, userId: string, displayName?: string) {
-	if ((await sql`select user_id from profiles where user_id = ${userId}`).length) return;
+	if ((await sql`select user_id from profiles where user_id = ${userId} limit 1`).length) return;
 	const settings = await loadSettingsRow(sql);
 	const bonus = Math.round(num(settings.welcome_bonus));
 	for (let i = 0; i < 6; i++) {
@@ -901,7 +909,11 @@ async function ensureProfileRow(sql: Sql, userId: string, displayName?: string) 
 			return;
 		} catch (err) {
 			const msg = err instanceof Error ? err.message : String(err ?? "");
-			if (/profiles_pkey/i.test(msg)) return;
+			// Concurrent boot or referral_code unique collision — treat existing row as success.
+			if (/profiles_pkey|duplicate key|unique constraint/i.test(msg)) {
+				if ((await sql`select user_id from profiles where user_id = ${userId} limit 1`).length) return;
+				continue;
+			}
 			if (i === 5) throw err;
 		}
 	}
@@ -1059,11 +1071,28 @@ export const getMe = createServerFn({ method: "GET" }).middleware([authMiddlewar
 	await ensureProfile(sql, context.userId);
 	await grantSilverAdmin(sql, context.userId);
 	let profile: Record<string, unknown>[] = [];
+	const loadProfile = async () => {
+		try {
+			return await sql`select role, phone, display_name, points, totp_enabled, banned, created_at, referral_code, address_line, city, zip from profiles where user_id = ${context.userId}`;
+		} catch {
+			await ensureSettingsSchema(sql);
+			return await sql`select role, phone, display_name, points, totp_enabled, banned, created_at, referral_code from profiles where user_id = ${context.userId}`;
+		}
+	};
 	try {
-		profile = await sql`select role, phone, display_name, points, totp_enabled, banned, created_at, referral_code, address_line, city, zip from profiles where user_id = ${context.userId}`;
-	} catch {
-		await ensureSettingsSchema(sql);
-		profile = await sql`select role, phone, display_name, points, totp_enabled, banned, created_at, referral_code from profiles where user_id = ${context.userId}`;
+		profile = await loadProfile();
+		if (!profile[0]) {
+			await ensureProfile(sql, context.userId);
+			profile = await loadProfile();
+		}
+	} catch (err) {
+		const msg = err instanceof Error ? err.message : String(err ?? "");
+		if (/profiles_pkey|duplicate key|unique constraint/i.test(msg)) {
+			await ensureProfile(sql, context.userId);
+			profile = await loadProfile();
+		} else {
+			throw err;
+		}
 	}
 	const admins = await sql`select count(*)::int as n from profiles where role = 'admin'`;
 	const unread = await sql`

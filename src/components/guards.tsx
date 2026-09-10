@@ -19,7 +19,7 @@ function accountLoadMessage(err: unknown) {
 
 async function loadStaffAccount() {
   let last: unknown;
-  for (let i = 0; i < 3; i += 1) {
+  for (let i = 0; i < 4; i += 1) {
     try {
       return await Promise.all([getMe(), getTwoFactorStatus()]);
     } catch (err) {
@@ -28,8 +28,8 @@ async function loadStaffAccount() {
       const retryable =
         isTransientFetchError(err) ||
         /profiles_pkey|duplicate key|unique constraint/i.test(msg);
-      if (!retryable || i === 2) throw err;
-      await new Promise((resolve) => setTimeout(resolve, 280 * (i + 1)));
+      if (!retryable || i === 3) throw err;
+      await new Promise((resolve) => setTimeout(resolve, 220 * (i + 1)));
     }
   }
   throw last;

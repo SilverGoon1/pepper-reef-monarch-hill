@@ -91,7 +91,15 @@ export function IncomingOrderQueue() {
   }
 
   function applyIncoming(list: PosTicket[]) {
-    const live = fifoIncoming(list.filter((t) => !snoozed.current.has(t.id) && !taken.current.has(t.id)));
+    // Only un-accepted tickets; skip anything already taken this session (kills double-accept flicker).
+    const live = fifoIncoming(
+      list.filter(
+        (t) =>
+          (t.status === "placed" || t.status === "awaiting_payment") &&
+          !snoozed.current.has(t.id) &&
+          !taken.current.has(t.id),
+      ),
+    );
     setQueue(live);
     setCurrentId((cur) => {
       if (cur && live.some((t) => t.id === cur)) return cur;
@@ -145,8 +153,16 @@ export function IncomingOrderQueue() {
         setToast(`Ticket #${formatTicketNo(accepted.ticketNo)} accepted — sent to the kitchen.`);
       })
       .catch((e) => {
+        const msg = e instanceof Error ? e.message : "Could not accept";
+        // If another station already accepted, treat as success — do not put it back in the modal.
+        if (/already|accepted|preparing|ready|cannot be accepted/i.test(msg)) {
+          taken.current.add(ticket.id);
+          emitPosAccepted({ ...ticket, status: "accepted" });
+          setToast(`Ticket #${formatTicketNo(ticket.ticketNo)} accepted — sent to the kitchen.`);
+          return;
+        }
         taken.current.delete(ticket.id);
-        setError(e instanceof Error ? e.message : "Could not accept");
+        setError(msg);
         setQueue((list) => {
           if (list.some((t) => t.id === ticket.id)) return list;
           return fifoIncoming([ticket, ...list]);
