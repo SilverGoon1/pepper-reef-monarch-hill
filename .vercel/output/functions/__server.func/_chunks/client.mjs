@@ -1,5 +1,6 @@
 import { r as __exportAll } from "../_runtime.mjs";
 import { n as genericOAuthClient, t as createAuthClient } from "../_libs/better-auth+[...].mjs";
+import { n as persist, r as create, t as createJSONStorage } from "../_libs/zustand.mjs";
 //#region scripts/sign-out-plan.mjs
 /**
 * The sign-out sequence used by `src/lib/auth/client.ts`, kept here as a pure
@@ -122,6 +123,84 @@ async function runSignOut({ livePreview, hasBearer, requestSignOut, clearToken, 
 async function runPreSignInSignOut({ livePreview, hasBearer, requestSignOut, clearToken, timeoutMs }) {
 	await settleWithin(requestSignOut, timeoutMs ?? signOutTimeoutMs(livePreview));
 	clearToken();
+}
+//#endregion
+//#region src/lib/cart-store.ts
+function lineKey(line) {
+	const tops = (line.toppings ?? []).map((t) => `${t.id}:${t.side}`).sort().join(",");
+	const conds = (line.condiments ?? []).map((c) => `${c.id}:${c.qty}`).sort().join(",");
+	return `${line.itemId}::${line.size ?? ""}::${line.halfItemId ?? ""}::${tops}::${conds}::${line.detail ?? ""}::${line.comment ?? ""}`;
+}
+var useCartStore = create()(persist((set) => ({
+	lines: [],
+	notes: "",
+	bagOpen: false,
+	openBag: () => set({ bagOpen: true }),
+	closeBag: () => set({ bagOpen: false }),
+	toggleBag: () => set((s) => ({ bagOpen: !s.bagOpen })),
+	add: (line) => set((s) => {
+		const key = lineKey(line);
+		const qtyAdd = Math.max(1, line.qty ?? 1);
+		if (s.lines.find((l) => l.key === key)) return { lines: s.lines.map((l) => l.key === key ? {
+			...l,
+			qty: l.qty + qtyAdd
+		} : l) };
+		return { lines: [...s.lines, {
+			key,
+			itemId: line.itemId,
+			categoryId: line.categoryId,
+			name: line.name,
+			size: line.size,
+			detail: line.detail,
+			comment: line.comment,
+			toppings: line.toppings,
+			halfItemId: line.halfItemId,
+			condiments: line.condiments,
+			unitPrice: line.unitPrice,
+			qty: qtyAdd
+		}] };
+	}),
+	setQty: (key, qty) => set((s) => ({ lines: qty <= 0 ? s.lines.filter((l) => l.key !== key) : s.lines.map((l) => l.key === key ? {
+		...l,
+		qty
+	} : l) })),
+	remove: (key) => set((s) => ({ lines: s.lines.filter((l) => l.key !== key) })),
+	setNotes: (notes) => set({ notes }),
+	clear: () => set({
+		lines: [],
+		notes: ""
+	})
+}), {
+	name: "south-end-cart-v1",
+	storage: createJSONStorage(() => {
+		if (typeof window === "undefined") return {
+			getItem: () => null,
+			setItem: () => {},
+			removeItem: () => {}
+		};
+		return localStorage;
+	}),
+	skipHydration: true,
+	partialize: (s) => ({
+		lines: s.lines,
+		notes: s.notes
+	})
+}));
+if (typeof window !== "undefined") useCartStore.persist.rehydrate();
+function wipeCart() {
+	useCartStore.getState().clear();
+	try {
+		useCartStore.persist.clearStorage();
+	} catch {}
+	if (typeof window !== "undefined") try {
+		window.localStorage.removeItem("south-end-cart-v1");
+	} catch {}
+}
+function cartTotals(lines) {
+	return {
+		count: lines.reduce((n, l) => n + l.qty, 0),
+		subtotal: Math.round(lines.reduce((n, l) => n + l.unitPrice * l.qty, 0) * 100) / 100
+	};
 }
 //#endregion
 //#region src/lib/auth/client.ts
@@ -296,9 +375,12 @@ async function signOut(redirectTo = "/") {
 		},
 		clearToken: () => setBearerToken(null),
 		redirect: () => {
+			try {
+				wipeCart();
+			} catch {}
 			window.location.href = redirectTo;
 		}
 	});
 }
 //#endregion
-export { signOut as a, signIn as i, client_exports as n, runPreSignInSignOut as o, getBearerToken as r, authClient as t };
+export { signOut as a, runPreSignInSignOut as c, signIn as i, client_exports as n, cartTotals as o, getBearerToken as r, useCartStore as s, authClient as t };

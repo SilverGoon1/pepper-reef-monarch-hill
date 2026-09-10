@@ -8,7 +8,7 @@ import { cartTotals, useCartStore } from "@/lib/cart-store";
 import { googleMapsCoordUrl } from "@/lib/geo";
 import { checkDeliveryAddress, getStorefront, placeGuestOrder, placeOrder } from "@/lib/shop-server";
 import { retryTransient } from "@/lib/fetch-retry";
-import { computeTax, clampTip, formatTicketNo, formatUsd, tipFromPercent, type ProfileView, type ShopSettingsPublic } from "@/lib/shop-types";
+import { computeTax, clampTip, CARD_PROCESSOR_LIVE, formatTicketNo, formatUsd, tipFromPercent, type ProfileView, type ShopSettingsPublic } from "@/lib/shop-types";
 import { etaMinutes, formatShopWhen, isOpenNow, nextOpenSlot, nyHm, nyWallToDate, nyYmd } from "@/lib/hours";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import type { RestaurantInfo } from "@/data/menu";
@@ -108,7 +108,7 @@ function CheckoutForm({
   const [guestName, setGuestName] = useState(profile?.displayName || "");
   const [guestPhone, setGuestPhone] = useState(profile?.phone || "");
   const guest = !profile;
-  const guestMustCard = guest && settings.guestCardRequired;
+  const guestMustCard = CARD_PROCESSOR_LIVE && guest && settings.guestCardRequired;
   const [whenMode, setWhenMode] = useState<"asap" | "schedule">(loadedSettings.openNow ? "asap" : "schedule");
   const [schedDate, setSchedDate] = useState("");
   const [schedTime, setSchedTime] = useState("");
@@ -274,8 +274,8 @@ function CheckoutForm({
       setError("Enter the name for pickup.");
       return;
     }
-    if (guest && settings.guestCardRequired && pay !== "pay_card") {
-      setError("Guests pay by card.");
+    if (pay === "pay_card" && !CARD_PROCESSOR_LIVE) {
+      setError("Card payments are not live yet. Pay at pickup or with cash.");
       return;
     }
     setBusy(true);
@@ -320,7 +320,7 @@ function CheckoutForm({
   function payLabel() {
     if (pay === "pay_pickup") return "Pay at pickup";
     if (pay === "pay_delivery") return "Cash";
-    return "Card (processor placeholder)";
+    return CARD_PROCESSOR_LIVE ? "Card" : "Card coming soon";
   }
 
   if (step === "review") {
@@ -442,8 +442,7 @@ function CheckoutForm({
         {guest ? (
           <div className="guest-banner">
             <p className="ed-sub">
-              Checking out as a guest. We only need a name and phone for the ticket
-              {settings.guestCardRequired ? ", and payment is by card" : ""}.{" "}
+              Checking out as a guest. We only need a name and phone for the ticket.{" "}
               <Link to="/login" search={{ next: "/checkout" }}>
                 Sign in
               </Link>{" "}
@@ -490,7 +489,7 @@ function CheckoutForm({
           </button>
         </div>
         {fulfillment === "pickup" ? (
-          <p className="ed-sub">Pickup at {pickupAt}. Pay when you arrive, or use the card placeholder. We will ask for a name at confirmation.</p>
+          <p className="ed-sub">Pickup at {pickupAt}. Pay when you arrive. We will ask for a name at confirmation.</p>
         ) : null}
         {!settings.openNow ? (
           <p className="ed-sub">
@@ -656,7 +655,9 @@ function CheckoutForm({
           <p className="ed-sub">
             {guestMustCard
               ? "Guest checkout is card-only. Sign in if you need to pay at pickup or with cash."
-              : settings.paymentPlaceholder}
+              : CARD_PROCESSOR_LIVE
+                ? settings.paymentPlaceholder
+                : "Pay at pickup or with cash. Card is coming soon."}
           </p>
           {guestMustCard ? null : fulfillment === "pickup" ? (
             <label className="pay-opt">
@@ -674,9 +675,9 @@ function CheckoutForm({
               Cash
             </label>
           )}
-          <label className={guestMustCard ? "pay-opt" : "pay-opt pay-disabled"}>
-            <input type="radio" name="pay" checked={pay === "pay_card"} onChange={() => setPay("pay_card")} />
-            Card {guestMustCard ? "(required for guests)" : "(processor placeholder)"}
+          <label className="pay-opt pay-disabled">
+            <input type="radio" name="pay" checked={false} disabled />
+            Card coming soon
           </label>
         </fieldset>
       </section>

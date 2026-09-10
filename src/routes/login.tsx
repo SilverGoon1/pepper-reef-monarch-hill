@@ -210,7 +210,7 @@ function Login() {
               onChange={(e) => setIdentifier(e.target.value)}
               autoComplete={mode === "phone" ? "tel" : "username"}
               inputMode={mode === "phone" ? "tel" : "email"}
-              placeholder={mode === "phone" ? "(609) 555-0100" : "Admin or you@email.com"}
+              placeholder={mode === "phone" ? "(609) 555-0100" : "you@email.com or username"}
               required
             />
           </label>
@@ -222,6 +222,7 @@ function Login() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               autoComplete={tab === "up" ? "new-password" : "current-password"}
+              placeholder="Password"
               minLength={8}
               required
             />

@@ -1,5 +1,5 @@
 import { n as getRequest } from "../_libs/@tanstack/react-start+[...].mjs";
-import { i as gateIdentityEnabled, n as authConfigured, t as auth } from "../index.mjs";
+import { n as authConfigured, s as gateIdentityEnabled, t as auth } from "../index.mjs";
 //#region src/lib/auth/verify.server.ts
 /**
 * Server-side session resolution (server-only).

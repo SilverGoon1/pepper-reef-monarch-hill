@@ -3,12 +3,14 @@ import { Q as literal, at as union, et as number, it as string, tt as object } f
 import { r as hashPassword } from "../_libs/better-auth__utils.mjs";
 import { C as require_jsx_runtime, S as useRouter, U as require_react, _ as createFileRoute, b as Navigate, d as HeadContent, f as useRouterState, h as Outlet, l as require_react_dom, m as createRouter, u as Scripts, v as createRootRoute, x as useNavigate, y as Link } from "../_libs/@tanstack/react-router+[...].mjs";
 import { n as createServerFn, t as createMiddleware } from "../_libs/@tanstack/start-client-core+[...].mjs";
-import { a as dbSource, o as getSql, r as GROK_PROVIDERS, t as auth } from "../index.mjs";
+import { c as dbSource, i as isVercelProduction, l as getSql, o as GROK_PROVIDERS, r as PRODUCTION_AUTH_ORIGINS, t as auth } from "../index.mjs";
 import { n as persist, r as create, t as createJSONStorage } from "../_libs/zustand.mjs";
 import { $ as ChevronLeft, A as MessageCircle, B as Flag, C as Plus, D as Paintbrush, E as PenLine, F as Layers, G as Copy, H as Eraser, I as ImagePlus, J as CircleHelp, K as CookingPot, L as Headset, M as MapPin, N as LogOut, O as Monitor, P as Link2, Q as ChevronRight, R as Ham, S as Printer, T as Phone, U as Drumstick, V as FlagOff, W as CupSoda, X as CircleAlert, Y as CircleCheck, Z as ChevronUp, _ as Scroll, a as Utensils, at as Ban, b as RotateCcw, c as TriangleAlert, d as Soup, et as ChevronDown, f as Snowflake, g as Search, h as Share, i as Volume2, it as Beef, j as Menu, k as Minus, l as Trash2, m as ShoppingBag, n as Wheat, nt as Bluetooth, o as UtensilsCrossed, ot as ArrowUp, p as Smartphone, q as Clock, r as VolumeX, rt as Bell, s as UserRound, t as X, tt as CakeSlice, u as Star, v as Sandwich, w as Pizza, x as RefreshCw, y as Salad, z as Flame } from "../_libs/lucide-react.mjs";
 import { a as Bar, i as CartesianGrid, n as YAxis, o as ResponsiveContainer, r as XAxis, s as Tooltip, t as BarChart } from "../_libs/recharts+[...].mjs";
 import "../_libs/leaflet.mjs";
-import { a as signOut, i as signIn, o as runPreSignInSignOut, r as getBearerToken, t as authClient } from "./client.mjs";
+import { a as signOut, c as runPreSignInSignOut, i as signIn, o as cartTotals, r as getBearerToken, s as useCartStore, t as authClient } from "./client.mjs";
+import { a as BOT_PRESETS, c as scopesForRole, i as verifyBotBearer, n as rateLimitBot, o as isBotRole, s as scopesForPreset, t as agentHasScope } from "./tokens.server.mjs";
+import { a as isStaffAdminAccount, i as STAFF_ADMIN_NAME, o as isStaffAdminUsername, r as STAFF_ADMIN_EMAIL, t as staffSecretConfigured } from "./staff-credential.server.mjs";
 import { createHash, createHmac, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
 //#region src/lib/fetch-retry.ts
 var import_react = /* @__PURE__ */ __toESM(require_react(), 1);
@@ -99,75 +101,6 @@ function AppErrorComponent({ error }) {
 */
 function AuthProvider({ children }) {
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_jsx_runtime.Fragment, { children });
-}
-//#endregion
-//#region src/lib/cart-store.ts
-function lineKey(line) {
-	const tops = (line.toppings ?? []).map((t) => `${t.id}:${t.side}`).sort().join(",");
-	const conds = (line.condiments ?? []).map((c) => `${c.id}:${c.qty}`).sort().join(",");
-	return `${line.itemId}::${line.size ?? ""}::${line.halfItemId ?? ""}::${tops}::${conds}::${line.detail ?? ""}::${line.comment ?? ""}`;
-}
-var useCartStore = create()(persist((set) => ({
-	lines: [],
-	notes: "",
-	bagOpen: false,
-	openBag: () => set({ bagOpen: true }),
-	closeBag: () => set({ bagOpen: false }),
-	toggleBag: () => set((s) => ({ bagOpen: !s.bagOpen })),
-	add: (line) => set((s) => {
-		const key = lineKey(line);
-		const qtyAdd = Math.max(1, line.qty ?? 1);
-		if (s.lines.find((l) => l.key === key)) return { lines: s.lines.map((l) => l.key === key ? {
-			...l,
-			qty: l.qty + qtyAdd
-		} : l) };
-		return { lines: [...s.lines, {
-			key,
-			itemId: line.itemId,
-			categoryId: line.categoryId,
-			name: line.name,
-			size: line.size,
-			detail: line.detail,
-			comment: line.comment,
-			toppings: line.toppings,
-			halfItemId: line.halfItemId,
-			condiments: line.condiments,
-			unitPrice: line.unitPrice,
-			qty: qtyAdd
-		}] };
-	}),
-	setQty: (key, qty) => set((s) => ({ lines: qty <= 0 ? s.lines.filter((l) => l.key !== key) : s.lines.map((l) => l.key === key ? {
-		...l,
-		qty
-	} : l) })),
-	remove: (key) => set((s) => ({ lines: s.lines.filter((l) => l.key !== key) })),
-	setNotes: (notes) => set({ notes }),
-	clear: () => set({
-		lines: [],
-		notes: ""
-	})
-}), {
-	name: "south-end-cart-v1",
-	storage: createJSONStorage(() => {
-		if (typeof window === "undefined") return {
-			getItem: () => null,
-			setItem: () => {},
-			removeItem: () => {}
-		};
-		return localStorage;
-	}),
-	skipHydration: true,
-	partialize: (s) => ({
-		lines: s.lines,
-		notes: s.notes
-	})
-}));
-if (typeof window !== "undefined") useCartStore.persist.rehydrate();
-function cartTotals(lines) {
-	return {
-		count: lines.reduce((n, l) => n + l.qty, 0),
-		subtotal: Math.round(lines.reduce((n, l) => n + l.unitPrice * l.qty, 0) * 100) / 100
-	};
 }
 //#endregion
 //#region src/components/cart-hydrate.tsx
@@ -485,6 +418,10 @@ var ADMIN_NAV = [
 	{
 		to: "/admin/financials",
 		label: "Financials"
+	},
+	{
+		to: "/admin/bots",
+		label: "Bot access"
 	},
 	{
 		to: "/admin/patches",
@@ -1973,17 +1910,6 @@ function googleMapsCoordUrl(lat, lng) {
 	return `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
 }
 //#endregion
-//#region src/lib/staff-admin.ts
-/** Shop desk login. Better Auth still stores an email; the form maps this username to it. */
-var STAFF_ADMIN_ID = "staff-admin";
-var STAFF_ADMIN_USERNAME = "admin";
-var STAFF_ADMIN_NAME = "Admin";
-var STAFF_ADMIN_EMAIL = "admin@staff.southend.pizza";
-var STAFF_ADMIN_PASSWORD = "Admin2014";
-function isStaffAdminUsername(raw) {
-	return raw.trim().toLowerCase() === STAFF_ADMIN_USERNAME;
-}
-//#endregion
 //#region src/lib/phone.ts
 function digitsOnly(value) {
 	return value.replace(/\D/g, "");
@@ -3145,7 +3071,7 @@ function pricePizzaBuild(opts) {
 function num(v) {
 	return moneyNumber(v);
 }
-function bool(v) {
+function bool$1(v) {
 	return v === true || v === "t" || v === "true";
 }
 async function seedIfEmpty(sql) {
@@ -3751,9 +3677,9 @@ async function loadCategories(sql) {
 			name: String(it.name ?? ""),
 			description: it.description ? String(it.description) : void 0,
 			prices,
-			highlight: bool(it.highlight),
+			highlight: bool$1(it.highlight),
 			image: it.image_data ? String(it.image_data) : void 0,
-			hideImage: bool(it.hide_image),
+			hideImage: bool$1(it.hide_image),
 			condiments: sanitizeCondiments(it.condiments)
 		});
 		byCat.set(catId, list);
@@ -3776,11 +3702,11 @@ async function loadSettingsRow(sql) {
 function publicSettings(row, hasZones) {
 	const weeklyHours = parseWeeklyHours(row.weekly_hours);
 	return {
-		vacationOn: bool(row.vacation_on),
+		vacationOn: bool$1(row.vacation_on),
 		vacationMessage: String(row.vacation_message ?? ""),
 		vacationUntil: String(row.vacation_until ?? ""),
 		paymentPlaceholder: String(row.payment_placeholder ?? ""),
-		guestCardRequired: bool(row.guest_card_required),
+		guestCardRequired: bool$1(row.guest_card_required),
 		pointsPerDollar: num(row.points_per_dollar) || 1,
 		redeemRate: Math.max(1, Math.round(num(row.redeem_rate) || 100)),
 		welcomeBonus: Math.round(num(row.welcome_bonus)),
@@ -3793,11 +3719,11 @@ function publicSettings(row, hasZones) {
 		prepMinutes: Math.max(5, Math.round(num(row.prep_minutes) || 25)),
 		deliveryMinutes: Math.max(5, Math.round(num(row.delivery_minutes) || 40)),
 		tagline: String(row.tagline ?? "Egg Harbor Township, New Jersey"),
-		showMark: row.show_mark === void 0 ? true : bool(row.show_mark),
+		showMark: row.show_mark === void 0 ? true : bool$1(row.show_mark),
 		weeklyHours,
 		openNow: isOpenNow(weeklyHours),
 		hoursSummary: hoursSummary(weeklyHours),
-		xlEnabled: bool(row.xl_enabled),
+		xlEnabled: bool$1(row.xl_enabled),
 		xlInches: String(row.xl_inches || "18\""),
 		xlPriceAdd: row.xl_price_add === void 0 || row.xl_price_add === null || row.xl_price_add === "" ? 2 : Math.max(0, num(row.xl_price_add)),
 		toppingPriceSm: row.topping_price_sm === void 0 || row.topping_price_sm === null || row.topping_price_sm === "" ? DEFAULT_TOPPING_PRICES.SM : Math.max(0, num(row.topping_price_sm)),
@@ -3930,34 +3856,11 @@ async function backfillRewardsLedger(sql) {
   `);
 }
 async function ensureStaffAdmin(sql) {
-	const found = (await sql.query(`select id from "user" where id = $1 or lower(email) = $2 limit 1`, [STAFF_ADMIN_ID, STAFF_ADMIN_EMAIL]))[0];
-	const userId = found?.id ? String(found.id) : STAFF_ADMIN_ID;
-	if (!found) await sql.query(`insert into "user" (id, name, email, "emailVerified", "createdAt", "updatedAt") values ($1,$2,$3,true,now(),now())`, [
-		userId,
-		STAFF_ADMIN_NAME,
-		STAFF_ADMIN_EMAIL
-	]);
-	else await sql.query(`update "user" set name = $1, email = $2, "emailVerified" = true, "updatedAt" = now() where id = $3`, [
-		STAFF_ADMIN_NAME,
-		STAFF_ADMIN_EMAIL,
-		userId
-	]);
+	const { applyStaffCredential, applyStaffTotpFromEnv } = await import("./staff-credential.server.mjs").then((n) => n.n);
+	const userId = await applyStaffCredential(sql);
 	await ensureProfile(sql, userId, STAFF_ADMIN_NAME);
 	await sql`update profiles set role = 'admin', display_name = ${STAFF_ADMIN_NAME} where user_id = ${userId}`;
-	const cred = (await sql.query(`select id, password from account where "userId" = $1 and "providerId" = 'credential' limit 1`, [userId]))[0];
-	if (cred?.id && String(cred.password ?? "").includes(":")) return;
-	const hash = await hashPassword(STAFF_ADMIN_PASSWORD);
-	if (cred?.id) {
-		await sql.query(`update account set password = $1, "updatedAt" = now() where id = $2 and "providerId" = 'credential'`, [hash, String(cred.id)]);
-		return;
-	}
-	await sql.query(`insert into account (id, "accountId", "providerId", "userId", password, "createdAt", "updatedAt")
-     values ($1,$2,'credential',$3,$4,now(),now())`, [
-		`account-${userId}`,
-		userId,
-		userId,
-		hash
-	]);
+	await applyStaffTotpFromEnv(sql, userId);
 }
 async function ensureProfile(sql, userId, displayName) {
 	const inflight = profileLocks.get(userId);
@@ -3992,7 +3895,7 @@ async function ensureProfileRow(sql, userId, displayName) {
 		if (i === 5) throw err;
 	}
 }
-async function requireAdmin(sql, userId) {
+async function requireAdmin$1(sql, userId) {
 	if ((await sql`select role from profiles where user_id = ${userId}`)[0]?.role !== "admin") {
 		const err = /* @__PURE__ */ new Error("Forbidden");
 		err.status = 403;
@@ -4031,7 +3934,7 @@ async function grantSilverAdmin(sql, userId) {
 	}
 }
 async function assertNotBanned(sql, userId) {
-	if (bool((await sql`select banned from profiles where user_id = ${userId}`)[0]?.banned)) throw new Error("This account has been restricted. Call the shop if you need help.");
+	if (bool$1((await sql`select banned from profiles where user_id = ${userId}`)[0]?.banned)) throw new Error("This account has been restricted. Call the shop if you need help.");
 }
 function parseOrderItems(raw) {
 	let src = raw;
@@ -4165,11 +4068,11 @@ var getMe = createServerFn({ method: "GET" }).middleware([authMiddleware]).handl
 		city: String(p?.city ?? ""),
 		zip: String(p?.zip ?? ""),
 		points: Math.round(num(p?.points)),
-		totpEnabled: bool(p?.totp_enabled),
+		totpEnabled: bool$1(p?.totp_enabled),
 		adminExists: num(admins[0]?.n) > 0,
 		unreadChats: Math.round(num(unread[0]?.n)),
 		adminInbox,
-		banned: bool(p?.banned),
+		banned: bool$1(p?.banned),
 		email: String(userRow?.email ?? ""),
 		referralCode,
 		inviteCount,
@@ -4286,17 +4189,32 @@ var claimAdmin = createServerFn({ method: "POST" }).middleware([authMiddleware])
 var getTwoFactorStatus = createServerFn({ method: "GET" }).middleware([authMiddleware]).handler(async ({ context }) => {
 	const sql = await getSql();
 	await ensureProfile(sql, context.userId);
-	if (!bool((await sql`select totp_enabled from profiles where user_id = ${context.userId}`)[0]?.totp_enabled)) return {
+	const profile = (await sql`select totp_enabled, role from profiles where user_id = ${context.userId}`)[0];
+	const email = String((await sql.query(`select email from "user" where id = $1 limit 1`, [context.userId]))[0]?.email ?? "");
+	const locked = profile?.role === "admin" || isStaffAdminAccount(context.userId, email);
+	const enabled = bool$1(profile?.totp_enabled);
+	if (locked && !enabled) return {
+		required: true,
+		unlocked: false,
+		enabled: false,
+		enroll: true,
+		locked: true
+	};
+	if (!enabled) return {
 		required: false,
 		unlocked: true,
-		enabled: false
+		enabled: false,
+		enroll: false,
+		locked: false
 	};
 	const exp = (await sql`select expires_at from two_factor_unlocks where user_id = ${context.userId}`)[0]?.expires_at;
 	const unlocked = Boolean(exp && new Date(String(exp)).getTime() > Date.now());
 	return {
 		required: !unlocked,
 		unlocked,
-		enabled: true
+		enabled: true,
+		enroll: false,
+		locked
 	};
 });
 var startTotpSetup = createServerFn({ method: "POST" }).middleware([authMiddleware]).handler(async ({ context }) => {
@@ -4322,7 +4240,7 @@ var verifyTotpChallenge = createServerFn({ method: "POST" }).middleware([authMid
 	const sql = await getSql();
 	const rows = await sql`
       select totp_secret, totp_enabled from profiles where user_id = ${context.userId}`;
-	if (!bool(rows[0]?.totp_enabled) || !rows[0]?.totp_secret) throw new Error("Two-factor is not enabled.");
+	if (!bool$1(rows[0]?.totp_enabled) || !rows[0]?.totp_secret) throw new Error("Two-factor is not enabled.");
 	if (!verifyTotp(String(rows[0].totp_secret), String(data.code || ""))) throw new Error("That code did not match.");
 	await sql.query(`insert into two_factor_unlocks (user_id, expires_at) values ($1, now() + interval '12 hours')
        on conflict (user_id) do update set expires_at = now() + interval '12 hours'`, [context.userId]);
@@ -4330,6 +4248,8 @@ var verifyTotpChallenge = createServerFn({ method: "POST" }).middleware([authMid
 });
 var disableTotp = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator((data) => data).handler(async ({ context, data }) => {
 	const sql = await getSql();
+	const email = String((await sql.query(`select email from "user" where id = $1 limit 1`, [context.userId]))[0]?.email ?? "");
+	if (String((await sql`select role from profiles where user_id = ${context.userId}`)[0]?.role ?? "") === "admin" || isStaffAdminAccount(context.userId, email)) throw new Error("Shop admin two-factor stays on.");
 	const rows = await sql`select totp_secret from profiles where user_id = ${context.userId}`;
 	if (!rows[0]?.totp_secret || !verifyTotp(String(rows[0].totp_secret), String(data.code || ""))) throw new Error("That code did not match.");
 	await sql`update profiles set totp_enabled = false, totp_secret = null where user_id = ${context.userId}`;
@@ -4337,7 +4257,10 @@ var disableTotp = createServerFn({ method: "POST" }).middleware([authMiddleware]
 	return { ok: true };
 });
 async function assertTwoFactor(sql, userId) {
-	if (!bool((await sql`select totp_enabled from profiles where user_id = ${userId}`)[0]?.totp_enabled)) return;
+	const profile = (await sql`select totp_enabled, role from profiles where user_id = ${userId}`)[0];
+	const email = String((await sql.query(`select email from "user" where id = $1 limit 1`, [userId]))[0]?.email ?? "");
+	if (!(bool$1(profile?.totp_enabled) || profile?.role === "admin" || isStaffAdminAccount(userId, email))) return;
+	if (!bool$1(profile?.totp_enabled)) throw new Error("Two-factor enrollment required.");
 	const exp = (await sql`select expires_at from two_factor_unlocks where user_id = ${userId}`)[0]?.expires_at;
 	if (!exp || new Date(String(exp)).getTime() <= Date.now()) throw new Error("Two-factor verification required.");
 }
@@ -4397,10 +4320,11 @@ async function writePlacedOrder(sql, userId, data) {
 	await ensureProfile(sql, userId);
 	await assertNotBanned(sql, userId);
 	const settings = await loadSettingsRow(sql);
-	if (bool(settings.vacation_on)) throw new Error(String(settings.vacation_message || "The shop is closed for vacation."));
+	if (bool$1(settings.vacation_on)) throw new Error(String(settings.vacation_message || "The shop is closed for vacation."));
 	if (!data.lines?.length) throw new Error("Your cart is empty.");
-	if (data.fulfillment === "pickup" && data.paymentMethod === "pay_delivery") throw new Error("Choose pay at pickup or card.");
-	if (data.fulfillment === "delivery" && data.paymentMethod === "pay_pickup") throw new Error("Choose cash or card.");
+	if (data.fulfillment === "pickup" && data.paymentMethod === "pay_delivery") throw new Error("Choose pay at pickup.");
+	if (data.fulfillment === "delivery" && data.paymentMethod === "pay_pickup") throw new Error("Choose cash.");
+	if (String(data.paymentMethod) === "pay_card") throw new Error("Card payments are not live yet. Pay at pickup or with cash.");
 	const pickupName = String(data.pickupName ?? "").trim().slice(0, 80);
 	if (data.fulfillment === "pickup" && !pickupName) throw new Error("Enter the name for pickup.");
 	const menuItems = await sql`select id, category_id, name, prices, condiments from menu_items`;
@@ -4502,7 +4426,7 @@ async function writePlacedOrder(sql, userId, data) {
 		if (scheduledAt.getTime() < min) throw new Error("Pick a time at least 15 minutes from now.");
 		if (scheduledAt.getTime() > max) throw new Error("Schedule within the next 14 days.");
 		if (!isOpenNow(weeklyHours, scheduledAt)) throw new Error(`The kitchen is closed at that time. ${hoursSummary(weeklyHours)}`);
-	} else if (!bool(settings.vacation_on) && !isOpenNow(weeklyHours)) throw new Error(`The kitchen is closed. ${hoursSummary(weeklyHours)}`);
+	} else if (!bool$1(settings.vacation_on) && !isOpenNow(weeklyHours)) throw new Error(`The kitchen is closed. ${hoursSummary(weeklyHours)}`);
 	const { tax, total: preTip } = computeTax(subtotal, discount, deliveryFee, settings.tax_rate === void 0 || settings.tax_rate === null || settings.tax_rate === "" ? 6.625 : Math.max(0, num(settings.tax_rate)));
 	const tip = clampTip(data.tip);
 	const total = Math.round((preTip + tip) * 100) / 100;
@@ -4568,7 +4492,6 @@ var placeGuestOrder = createServerFn({ method: "POST" }).validator((data) => dat
 	const phone = toTenDigitPhone(String(data.guestPhone ?? ""));
 	if (!name) throw new Error("Enter your name.");
 	if (!phone) throw new Error("Enter a 10-digit US phone number.");
-	if (bool((await loadSettingsRow(sql)).guest_card_required) && String(data.paymentMethod) !== "pay_card") throw new Error("Guests pay by card. Choose card to place this order.");
 	const userId = await ensureGuestCustomer(sql, name, phone);
 	const pickupName = String(data.pickupName ?? "").trim().slice(0, 80) || name;
 	return writePlacedOrder(sql, userId, {
@@ -4584,7 +4507,7 @@ var listMyOrders = createServerFn({ method: "GET" }).middleware([authMiddleware]
 var saveShopMenu = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator((data) => data).handler(async ({ context, data }) => {
 	const sql = await getSql();
 	await ensureProfile(sql, context.userId);
-	await requireAdmin(sql, context.userId);
+	await requireAdmin$1(sql, context.userId);
 	await sql`delete from menu_items`;
 	await sql`delete from menu_categories`;
 	let i = 0;
@@ -4624,7 +4547,7 @@ var saveShopMenu = createServerFn({ method: "POST" }).middleware([authMiddleware
 var saveShopSettings = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator((data) => data).handler(async ({ context, data }) => {
 	const sql = await getSql();
 	await ensureProfile(sql, context.userId);
-	await requireAdmin(sql, context.userId);
+	await requireAdmin$1(sql, context.userId);
 	const sets = [];
 	const params = [];
 	const add = (col, val) => {
@@ -4715,7 +4638,7 @@ var saveShopSettings = createServerFn({ method: "POST" }).middleware([authMiddle
 createServerFn({ method: "POST" }).middleware([authMiddleware]).validator((data) => data).handler(async ({ context, data }) => {
 	const sql = await getSql();
 	await ensureProfile(sql, context.userId);
-	await requireAdmin(sql, context.userId);
+	await requireAdmin$1(sql, context.userId);
 	const restaurant = restaurantFrom({ restaurant: data.restaurant });
 	await sql.query(`update shop_settings set restaurant = $1::jsonb, footer = $2, tagline = $3, show_mark = $4 where id = 1`, [
 		JSON.stringify(restaurant),
@@ -4730,7 +4653,7 @@ var getAdminShop = createServerFn({ method: "GET" }).middleware([authMiddleware]
 	const sql = await getSql();
 	await bootShop(sql);
 	await ensureProfile(sql, context.userId);
-	await requireAdmin(sql, context.userId);
+	await requireAdmin$1(sql, context.userId);
 	const row = await loadSettingsRow(sql);
 	const cells = await zoneCells(sql);
 	const categories = await loadCategories(sql);
@@ -4748,7 +4671,7 @@ var getAdminShop = createServerFn({ method: "GET" }).middleware([authMiddleware]
 var saveDeliveryZone = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator((data) => data).handler(async ({ context, data }) => {
 	const sql = await getSql();
 	await ensureProfile(sql, context.userId);
-	await requireAdmin(sql, context.userId);
+	await requireAdmin$1(sql, context.userId);
 	await sql.query(`update delivery_zones set cells = $1::jsonb, name = $2, updated_at = now(), updated_by = $3 where id = 1`, [
 		JSON.stringify(data.cells),
 		data.name ?? "Delivery area",
@@ -4763,13 +4686,13 @@ var saveDeliveryZone = createServerFn({ method: "POST" }).middleware([authMiddle
 var listAllOrders = createServerFn({ method: "GET" }).middleware([authMiddleware]).handler(async ({ context }) => {
 	const sql = await getSql();
 	await ensureProfile(sql, context.userId);
-	await requireAdmin(sql, context.userId);
+	await requireAdmin$1(sql, context.userId);
 	return (await sql`select * from orders order by created_at desc limit 200`).map(toOrder);
 });
 var updateOrderStatus = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator((data) => data).handler(async ({ context, data }) => {
 	const sql = await getSql();
 	await ensureProfile(sql, context.userId);
-	await requireAdmin(sql, context.userId);
+	await requireAdmin$1(sql, context.userId);
 	if (!(/* @__PURE__ */ new Set([
 		"placed",
 		"accepted",
@@ -4791,7 +4714,7 @@ var updateOrderStatus = createServerFn({ method: "POST" }).middleware([authMiddl
 var acceptOrder = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator((data) => data).handler(async ({ context, data }) => {
 	const sql = await getSql();
 	await ensureProfile(sql, context.userId);
-	await requireAdmin(sql, context.userId);
+	await requireAdmin$1(sql, context.userId);
 	const id = String(data?.id ?? "").trim();
 	if (!id) throw new Error("Ticket is missing.");
 	const taken = await sql.query(`update orders
@@ -4809,7 +4732,7 @@ var getAdminInsights = createServerFn({ method: "GET" }).middleware([authMiddlew
 	const sql = await getSql();
 	await bootShop(sql);
 	await ensureProfile(sql, context.userId);
-	await requireAdmin(sql, context.userId);
+	await requireAdmin$1(sql, context.userId);
 	const profiles = await sql`select user_id, display_name, points, totp_enabled, created_at from profiles`;
 	const parsed = (await sql`
       select * from orders order by created_at desc limit 400`).map(toOrder);
@@ -4875,7 +4798,7 @@ var getAdminInsights = createServerFn({ method: "GET" }).middleware([authMiddlew
 		customers: {
 			total: profiles.length,
 			new7d,
-			twoFactor: profiles.filter((p) => bool(p.totp_enabled)).length,
+			twoFactor: profiles.filter((p) => bool$1(p.totp_enabled)).length,
 			avgPoints,
 			repeat: [...spendByUser.values()].filter((s) => s.orders > 1).length,
 			top: profiles.map((p) => {
@@ -4968,10 +4891,10 @@ function toThread(row, customerName) {
 		createdAt: iso(row.created_at),
 		orderId: order?.id ?? (row.order_id ? String(row.order_id) : null),
 		order,
-		customerBanned: bool(row.banned ?? row.customer_banned),
+		customerBanned: bool$1(row.banned ?? row.customer_banned),
 		staffNote: String(row.staff_note ?? ""),
-		muted: bool(row.muted),
-		flagged: bool(row.flagged)
+		muted: bool$1(row.muted),
+		flagged: bool$1(row.flagged)
 	};
 }
 function toMessage(row) {
@@ -4988,7 +4911,7 @@ var listCustomers = createServerFn({ method: "GET" }).middleware([authMiddleware
 	const sql = await getSql();
 	await ensureSettingsSchema(sql);
 	await ensureProfile(sql, context.userId);
-	await requireAdmin(sql, context.userId);
+	await requireAdmin$1(sql, context.userId);
 	const profiles = await sql`
       select p.user_id, p.role, p.phone, p.display_name, p.points, p.totp_enabled, p.created_at, p.banned,
              u.email, u.name as user_name
@@ -5014,12 +4937,12 @@ var listCustomers = createServerFn({ method: "GET" }).middleware([authMiddleware
 			email: String(p.email ?? ""),
 			role: p.role === "admin" ? "admin" : "customer",
 			points: Math.round(num(p.points)),
-			totpEnabled: bool(p.totp_enabled),
+			totpEnabled: bool$1(p.totp_enabled),
 			createdAt: iso(p.created_at),
 			orderCount: live.length,
 			spend: live.reduce((acc, o) => acc + o.total, 0),
 			lastOrderAt: hist[0]?.createdAt ?? null,
-			banned: bool(p.banned),
+			banned: bool$1(p.banned),
 			orders: hist
 		};
 	});
@@ -5027,7 +4950,7 @@ var listCustomers = createServerFn({ method: "GET" }).middleware([authMiddleware
 var setAccountRole = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator((data) => data).handler(async ({ context, data }) => {
 	const sql = await getSql();
 	await ensureProfile(sql, context.userId);
-	await requireAdmin(sql, context.userId);
+	await requireAdmin$1(sql, context.userId);
 	const userId = String(data.userId || "").trim();
 	if (!userId) throw new Error("Choose an account.");
 	if (data.role !== "admin" && data.role !== "customer") throw new Error("Invalid role.");
@@ -5046,7 +4969,7 @@ var setAccountBanned = createServerFn({ method: "POST" }).middleware([authMiddle
 	const sql = await getSql();
 	await ensureSettingsSchema(sql);
 	await ensureProfile(sql, context.userId);
-	await requireAdmin(sql, context.userId);
+	await requireAdmin$1(sql, context.userId);
 	const userId = String(data.userId || "").trim();
 	if (!userId) throw new Error("Choose an account.");
 	if (userId === context.userId) throw new Error("You cannot ban your own account.");
@@ -5066,7 +4989,7 @@ var adjustCustomerPoints = createServerFn({ method: "POST" }).middleware([authMi
 	const sql = await getSql();
 	await ensureSettingsSchema(sql);
 	await ensureProfile(sql, context.userId);
-	await requireAdmin(sql, context.userId);
+	await requireAdmin$1(sql, context.userId);
 	const userId = String(data.userId || "").trim();
 	if (!userId) throw new Error("Choose an account.");
 	const delta = Math.round(num(data.delta));
@@ -5085,7 +5008,7 @@ var deleteOrder = createServerFn({ method: "POST" }).middleware([authMiddleware]
 	const sql = await getSql();
 	await ensureSettingsSchema(sql);
 	await ensureProfile(sql, context.userId);
-	await requireAdmin(sql, context.userId);
+	await requireAdmin$1(sql, context.userId);
 	const id = String(data.id || "").trim();
 	if (!id) throw new Error("Choose an order.");
 	if (!(await sql`select id from orders where id = ${id}`)[0]) throw new Error("Order not found.");
@@ -5208,7 +5131,7 @@ var patchPosOrder = createServerFn({ method: "POST" }).middleware([authMiddlewar
 	const sql = await getSql();
 	await ensureSettingsSchema(sql);
 	await ensureProfile(sql, context.userId);
-	await requireAdmin(sql, context.userId);
+	await requireAdmin$1(sql, context.userId);
 	const id = String(data.id || "").trim();
 	if (!id) throw new Error("Choose an order.");
 	const rows = await sql`select * from orders where id = ${id}`;
@@ -5241,7 +5164,7 @@ var listPosOrders = createServerFn({ method: "GET" }).middleware([authMiddleware
 	const sql = await getSql();
 	await ensureSettingsSchema(sql);
 	await ensureProfile(sql, context.userId);
-	await requireAdmin(sql, context.userId);
+	await requireAdmin$1(sql, context.userId);
 	return (await sql`
       select o.*, p.display_name, p.phone,
         ping.id as chat_thread_id,
@@ -5272,7 +5195,7 @@ var listIncomingOrders = createServerFn({ method: "GET" }).middleware([authMiddl
 	const sql = await getSql();
 	await ensureSettingsSchema(sql);
 	await ensureProfile(sql, context.userId);
-	await requireAdmin(sql, context.userId);
+	await requireAdmin$1(sql, context.userId);
 	return (await sql`
       select o.*, p.display_name, p.phone
       from orders o
@@ -5293,7 +5216,7 @@ var getAdminInboxCount = createServerFn({ method: "GET" }).middleware([authMiddl
 	const sql = await getSql();
 	await ensureSettingsSchema(sql);
 	await ensureProfile(sql, context.userId);
-	await requireAdmin(sql, context.userId);
+	await requireAdmin$1(sql, context.userId);
 	const rows = await sql`
       select count(*)::int as n from chat_threads where unread_admin > 0 and status <> 'solved' and muted is not true`;
 	return { unread: Math.round(num(rows[0]?.n)) };
@@ -5302,7 +5225,7 @@ var listAdminChats = createServerFn({ method: "GET" }).middleware([authMiddlewar
 	const sql = await getSql();
 	await ensureSettingsSchema(sql);
 	await ensureProfile(sql, context.userId);
-	await requireAdmin(sql, context.userId);
+	await requireAdmin$1(sql, context.userId);
 	return (await sql`
       select t.*, p.display_name, p.phone as customer_phone, p.banned,
         o.id as linked_order_id, o.ticket_no as order_ticket_no, o.status as order_status, o.fulfillment as order_fulfillment,
@@ -5429,7 +5352,7 @@ var setChatResolution = createServerFn({ method: "POST" }).middleware([authMiddl
 	const sql = await getSql();
 	await ensureSettingsSchema(sql);
 	await ensureProfile(sql, context.userId);
-	await requireAdmin(sql, context.userId);
+	await requireAdmin$1(sql, context.userId);
 	const threadId = String(data.threadId || "");
 	if (!(await sql`select id from chat_threads where id = ${threadId}`)[0]) throw new Error("Chat not found.");
 	const status = data.solved ? "solved" : "open";
@@ -5463,7 +5386,7 @@ var startAdminChat = createServerFn({ method: "POST" }).middleware([authMiddlewa
 	const sql = await getSql();
 	await ensureSettingsSchema(sql);
 	await ensureProfile(sql, context.userId);
-	await requireAdmin(sql, context.userId);
+	await requireAdmin$1(sql, context.userId);
 	const userId = String(data.userId || "").trim();
 	if (!userId) throw new Error("Choose a customer.");
 	if (!(await sql`select user_id from profiles where user_id = ${userId}`)[0]) throw new Error("Account not found.");
@@ -5485,7 +5408,7 @@ var setChatStaffNote = createServerFn({ method: "POST" }).middleware([authMiddle
 	const sql = await getSql();
 	await ensureSettingsSchema(sql);
 	await ensureProfile(sql, context.userId);
-	await requireAdmin(sql, context.userId);
+	await requireAdmin$1(sql, context.userId);
 	const threadId = String(data.threadId || "");
 	if (!(await sql`select id from chat_threads where id = ${threadId}`)[0]) throw new Error("Chat not found.");
 	const note = String(data.note ?? "").slice(0, 800);
@@ -5499,7 +5422,7 @@ var setChatMuted = createServerFn({ method: "POST" }).middleware([authMiddleware
 	const sql = await getSql();
 	await ensureSettingsSchema(sql);
 	await ensureProfile(sql, context.userId);
-	await requireAdmin(sql, context.userId);
+	await requireAdmin$1(sql, context.userId);
 	const threadId = String(data.threadId || "");
 	if (!(await sql`select id from chat_threads where id = ${threadId}`)[0]) throw new Error("Chat not found.");
 	const muted = Boolean(data.muted);
@@ -5513,7 +5436,7 @@ var setChatFlagged = createServerFn({ method: "POST" }).middleware([authMiddlewa
 	const sql = await getSql();
 	await ensureSettingsSchema(sql);
 	await ensureProfile(sql, context.userId);
-	await requireAdmin(sql, context.userId);
+	await requireAdmin$1(sql, context.userId);
 	const threadId = String(data.threadId || "");
 	if (!(await sql`select id from chat_threads where id = ${threadId}`)[0]) throw new Error("Chat not found.");
 	const flagged = Boolean(data.flagged);
@@ -5527,7 +5450,7 @@ var deleteChatMessage = createServerFn({ method: "POST" }).middleware([authMiddl
 	const sql = await getSql();
 	await ensureSettingsSchema(sql);
 	await ensureProfile(sql, context.userId);
-	await requireAdmin(sql, context.userId);
+	await requireAdmin$1(sql, context.userId);
 	const id = String(data.id || "").trim();
 	const row = (await sql`select thread_id from chat_messages where id = ${id}`)[0];
 	if (!row) throw new Error("Message not found.");
@@ -5544,7 +5467,7 @@ var deleteChatThread = createServerFn({ method: "POST" }).middleware([authMiddle
 	const sql = await getSql();
 	await ensureSettingsSchema(sql);
 	await ensureProfile(sql, context.userId);
-	await requireAdmin(sql, context.userId);
+	await requireAdmin$1(sql, context.userId);
 	const threadId = String(data.threadId || "").trim();
 	if (!(await sql`select id from chat_threads where id = ${threadId}`)[0]) throw new Error("Chat not found.");
 	await sql`delete from chat_messages where thread_id = ${threadId}`;
@@ -6193,11 +6116,11 @@ function SupportDock() {
 }
 //#endregion
 //#region src/styles.css?url
-var styles_default = "/assets/styles-BTn6B9pH.css";
+var styles_default = "/assets/styles-k-lQw96J.css";
 //#endregion
 //#region src/routes/__root.tsx
 var APP_NAME = "South End Pizza III";
-var Route$26 = createRootRoute({
+var Route$29 = createRootRoute({
 	head: () => ({
 		meta: [
 			{ charSet: "utf-8" },
@@ -7854,7 +7777,8 @@ function Storefront({ restaurant, categories, settings }) {
 	const add = useCartStore((s) => s.add);
 	const bagOpen = useCartStore((s) => s.bagOpen);
 	const closeBag = useCartStore((s) => s.closeBag);
-	const { count, subtotal } = cartTotals(useCartStore((s) => s.lines));
+	const lines = useCartStore((s) => s.lines);
+	const { count, subtotal } = cartTotals(lines);
 	const visible = (0, import_react.useMemo)(() => categories.find((c) => c.id === active) ?? categories[0], [categories, active]);
 	const suggestions = (0, import_react.useMemo)(() => rankMenu(categories, query), [categories, query]);
 	const pickupAt = `${restaurant.address}, ${restaurant.city}`;
@@ -8182,7 +8106,7 @@ function Storefront({ restaurant, categories, settings }) {
 }
 //#endregion
 //#region src/routes/index.tsx
-var Route$25 = createFileRoute("/")({
+var Route$28 = createFileRoute("/")({
 	loader: () => retryTransient(() => getStorefront()),
 	staleTime: 3e4,
 	pendingMs: 8e3,
@@ -8218,7 +8142,7 @@ function HomePending() {
 	});
 }
 function Home() {
-	const data = Route$25.useLoaderData();
+	const data = Route$28.useLoaderData();
 	const { user, isPending } = useCurrentUserState();
 	const [profile, setProfile] = (0, import_react.useState)(null);
 	const toggleBag = useCartStore((s) => s.toggleBag);
@@ -8742,6 +8666,19 @@ function SessionGate({ children, needAdmin }) {
 			})
 		]
 	});
+	if (twoFactor.enroll) return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+		className: "page-card",
+		children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h1", { children: "Set up two-factor" }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { children: "Shop admin needs an authenticator app before the desk can open." }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Link, {
+				to: "/enroll-2fa",
+				search: { next: pathname },
+				className: "btn-print",
+				children: "Enroll authenticator"
+			})
+		]
+	});
 	if (twoFactor.required) return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 		className: "page-card",
 		children: [
@@ -8749,6 +8686,7 @@ function SessionGate({ children, needAdmin }) {
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { children: "Enter the code from your authenticator app to continue." }),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Link, {
 				to: "/verify-2fa",
+				search: { next: pathname },
 				className: "btn-print",
 				children: "Verify"
 			})
@@ -8859,7 +8797,7 @@ function asTab(raw) {
 	const s = String(raw ?? "summary");
 	return TABS$2.includes(s) ? s : "summary";
 }
-var Route$24 = createFileRoute("/account")({
+var Route$27 = createFileRoute("/account")({
 	validateSearch: (search) => {
 		const tab = asTab(search.tab);
 		return tab === "summary" ? {} : { tab };
@@ -8867,7 +8805,7 @@ var Route$24 = createFileRoute("/account")({
 	component: AccountPage
 });
 function AccountPage() {
-	const { tab } = Route$24.useSearch();
+	const { tab } = Route$27.useSearch();
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
 		className: "shop-shell",
 		children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SessionGate, { children: ({ profile }) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(ShopHeader, { profile }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("main", {
@@ -9326,7 +9264,10 @@ function AccountBody({ profile, tab }) {
 					className: "ed-sub",
 					children: "Protect the account with an authenticator app (Google Authenticator, Authy, 1Password). This is app-based 2FA — not SMS."
 				}),
-				totpOn ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("form", {
+				totpOn ? profile.role === "admin" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+					className: "ed-sub",
+					children: "Shop admin two-factor stays on. You can rotate the authenticator from a new enrollment after a verified session."
+				}) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("form", {
 					className: "login-form",
 					onSubmit: (e) => {
 						e.preventDefault();
@@ -9962,7 +9903,7 @@ function IncomingOrderQueue() {
 }
 //#endregion
 //#region src/routes/admin.tsx
-var Route$23 = createFileRoute("/admin")({ component: AdminLayout });
+var Route$26 = createFileRoute("/admin")({ component: AdminLayout });
 function AdminLayout() {
 	const pathname = useRouterState({ select: (s) => s.location.pathname });
 	const posMode = pathname === "/admin/pos" || pathname.startsWith("/admin/pos/");
@@ -10349,7 +10290,7 @@ function CategoryJump() {
 }
 //#endregion
 //#region src/routes/board.tsx
-var Route$22 = createFileRoute("/board")({ component: BoardPage });
+var Route$25 = createFileRoute("/board")({ component: BoardPage });
 function BoardPage() {
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SessionGate, {
 		needAdmin: true,
@@ -10459,7 +10400,7 @@ function BoardInner() {
 }
 //#endregion
 //#region src/routes/checkout.tsx
-var Route$21 = createFileRoute("/checkout")({
+var Route$24 = createFileRoute("/checkout")({
 	loader: () => retryTransient(() => getStorefront()),
 	staleTime: 3e4,
 	pendingMs: 8e3,
@@ -10480,7 +10421,7 @@ function CheckoutPending() {
 	});
 }
 function CheckoutPage() {
-	const data = Route$21.useLoaderData();
+	const data = Route$24.useLoaderData();
 	const { user, isPending } = useCurrentUserState();
 	if (isPending) return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 		className: "shop-shell",
@@ -10545,7 +10486,7 @@ function CheckoutForm({ profile, restaurant, settings: loadedSettings }) {
 	const [guestName, setGuestName] = (0, import_react.useState)(profile?.displayName || "");
 	const [guestPhone, setGuestPhone] = (0, import_react.useState)(profile?.phone || "");
 	const guest = !profile;
-	const guestMustCard = guest && settings.guestCardRequired;
+	const guestMustCard = false;
 	const [whenMode, setWhenMode] = (0, import_react.useState)(loadedSettings.openNow ? "asap" : "schedule");
 	const [schedDate, setSchedDate] = (0, import_react.useState)("");
 	const [schedTime, setSchedTime] = (0, import_react.useState)("");
@@ -10557,10 +10498,6 @@ function CheckoutForm({ profile, restaurant, settings: loadedSettings }) {
 		};
 	}, []);
 	(0, import_react.useEffect)(() => {
-		if (guestMustCard) {
-			setPay("pay_card");
-			return;
-		}
 		setPay(fulfillment === "delivery" ? "pay_delivery" : "pay_pickup");
 	}, [fulfillment, guestMustCard]);
 	(0, import_react.useEffect)(() => {
@@ -10718,8 +10655,8 @@ function CheckoutForm({ profile, restaurant, settings: loadedSettings }) {
 			setError("Enter the name for pickup.");
 			return;
 		}
-		if (guest && settings.guestCardRequired && pay !== "pay_card") {
-			setError("Guests pay by card.");
+		if (pay === "pay_card" && true) {
+			setError("Card payments are not live yet. Pay at pickup or with cash.");
 			return;
 		}
 		setBusy(true);
@@ -10764,7 +10701,7 @@ function CheckoutForm({ profile, restaurant, settings: loadedSettings }) {
 	function payLabel() {
 		if (pay === "pay_pickup") return "Pay at pickup";
 		if (pay === "pay_delivery") return "Cash";
-		return "Card (processor placeholder)";
+		return "Card coming soon";
 	}
 	if (step === "review") return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
 		className: "confirm-page",
@@ -10901,9 +10838,7 @@ function CheckoutForm({ profile, restaurant, settings: loadedSettings }) {
 						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
 							className: "ed-sub",
 							children: [
-								"Checking out as a guest. We only need a name and phone for the ticket",
-								settings.guestCardRequired ? ", and payment is by card" : "",
-								".",
+								"Checking out as a guest. We only need a name and phone for the ticket.",
 								" ",
 								/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Link, {
 									to: "/login",
@@ -10963,7 +10898,7 @@ function CheckoutForm({ profile, restaurant, settings: loadedSettings }) {
 					children: [
 						"Pickup at ",
 						pickupAt,
-						". Pay when you arrive, or use the card placeholder. We will ask for a name at confirmation."
+						". Pay when you arrive. We will ask for a name at confirmation."
 					]
 				}) : null,
 				!settings.openNow ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
@@ -11171,9 +11106,9 @@ function CheckoutForm({ profile, restaurant, settings: loadedSettings }) {
 						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("legend", { children: "Payment" }),
 						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 							className: "ed-sub",
-							children: guestMustCard ? "Guest checkout is card-only. Sign in if you need to pay at pickup or with cash." : settings.paymentPlaceholder
+							children: "Pay at pickup or with cash. Card is coming soon."
 						}),
-						guestMustCard ? null : fulfillment === "pickup" ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", {
+						fulfillment === "pickup" ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", {
 							className: "pay-opt",
 							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
 								type: "radio",
@@ -11191,17 +11126,13 @@ function CheckoutForm({ profile, restaurant, settings: loadedSettings }) {
 							}), "Cash"]
 						}),
 						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", {
-							className: guestMustCard ? "pay-opt" : "pay-opt pay-disabled",
-							children: [
-								/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
-									type: "radio",
-									name: "pay",
-									checked: pay === "pay_card",
-									onChange: () => setPay("pay_card")
-								}),
-								"Card ",
-								guestMustCard ? "(required for guests)" : "(processor placeholder)"
-							]
+							className: "pay-opt pay-disabled",
+							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
+								type: "radio",
+								name: "pay",
+								checked: false,
+								disabled: true
+							}), "Card coming soon"]
 						})
 					]
 				})
@@ -11312,13 +11243,112 @@ function CheckoutForm({ profile, restaurant, settings: loadedSettings }) {
 	});
 }
 //#endregion
+//#region src/routes/enroll-2fa.tsx
+function safeNext$2(raw) {
+	if (typeof raw !== "string") return void 0;
+	if (!raw.startsWith("/") || raw.startsWith("//") || raw.startsWith("/login")) return void 0;
+	return raw;
+}
+var Route$23 = createFileRoute("/enroll-2fa")({
+	validateSearch: (search) => {
+		const next = safeNext$2(search.next);
+		return next ? { next } : {};
+	},
+	component: Enroll2fa
+});
+function Enroll2fa() {
+	const { user, isPending } = useCurrentUserState();
+	const { next } = Route$23.useSearch();
+	const [secret, setSecret] = (0, import_react.useState)("");
+	const [uri, setUri] = (0, import_react.useState)("");
+	const [code, setCode] = (0, import_react.useState)("");
+	const [error, setError] = (0, import_react.useState)("");
+	const [busy, setBusy] = (0, import_react.useState)(false);
+	const [done, setDone] = (0, import_react.useState)(false);
+	(0, import_react.useEffect)(() => {
+		if (!user) return;
+		startTotpSetup().then((r) => {
+			setSecret(r.secret);
+			setUri(r.uri);
+		}).catch((err) => setError(err instanceof Error ? err.message : "Could not start setup"));
+	}, [user]);
+	if (isPending) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+		className: "page-skel",
+		children: "Checking sign-in…"
+	});
+	if (!user) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(RedirectToSignIn, {});
+	if (done) {
+		const dest = next || "/admin/pos";
+		window.location.replace(dest);
+		return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+			className: "page-skel",
+			children: "Opening the shop desk…"
+		});
+	}
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("main", {
+		className: "login-page",
+		children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("form", {
+			className: "login-card",
+			onSubmit: (e) => {
+				e.preventDefault();
+				setBusy(true);
+				setError("");
+				confirmTotpSetup({ data: { code } }).then(() => setDone(true)).catch((err) => setError(err instanceof Error ? err.message : "Could not confirm")).finally(() => setBusy(false));
+			},
+			children: [
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+					className: "shop-brand-kicker",
+					children: "Shop desk"
+				}),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h1", { children: "Set up two-factor" }),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+					className: "ed-sub",
+					children: "Admin requires an authenticator app (Google Authenticator, Authy, 1Password). Scan the code or type the key, then enter a 6-digit code to confirm."
+				}),
+				uri ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(InviteQr, {
+					value: uri,
+					label: "Authenticator QR code"
+				}) : null,
+				secret ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("code", {
+					className: "totp-secret",
+					children: secret
+				}) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+					className: "ed-sub",
+					children: "Preparing a key…"
+				}),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", {
+					className: "ed-field",
+					children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Confirm code" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
+						className: "ed-input",
+						inputMode: "numeric",
+						autoComplete: "one-time-code",
+						value: code,
+						onChange: (e) => setCode(e.target.value),
+						required: true
+					})]
+				}),
+				error ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+					className: "form-error",
+					children: error
+				}) : null,
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+					type: "submit",
+					className: "btn-print",
+					disabled: busy || !secret,
+					children: busy ? "Saving…" : "Confirm and continue"
+				})
+			]
+		})
+	});
+}
+//#endregion
 //#region src/routes/help.tsx
-var Route$20 = createFileRoute("/help")({
+var Route$22 = createFileRoute("/help")({
 	loader: () => getShopContact(),
 	component: HelpPage
 });
 function HelpPage() {
-	const contact = Route$20.useLoaderData();
+	const contact = Route$22.useLoaderData();
 	const { user, isPending } = useCurrentUserState();
 	const [profile, setProfile] = (0, import_react.useState)(null);
 	(0, import_react.useEffect)(() => {
@@ -11389,7 +11419,7 @@ function HelpPage() {
 }
 //#endregion
 //#region src/routes/install.tsx
-var Route$19 = createFileRoute("/install")({
+var Route$21 = createFileRoute("/install")({
 	head: () => ({ meta: [{ title: "Download App" }] }),
 	component: InstallPage
 });
@@ -11619,7 +11649,7 @@ function safeNext$1(raw) {
 	if (raw === "/") return void 0;
 	return raw;
 }
-var Route$18 = createFileRoute("/login")({
+var Route$20 = createFileRoute("/login")({
 	validateSearch: (search) => {
 		const next = safeNext$1(search.next);
 		const ref = typeof search.ref === "string" ? search.ref.trim().toUpperCase() : "";
@@ -11663,7 +11693,7 @@ function providerMark(label) {
 function Login() {
 	const { user, isPending } = useCurrentUserState();
 	const navigate = useNavigate();
-	const { next, ref, error: searchError } = Route$18.useSearch();
+	const { next, ref, error: searchError } = Route$20.useSearch();
 	const [mode, setMode] = (0, import_react.useState)("email");
 	const [tab, setTab] = (0, import_react.useState)("in");
 	const [identifier, setIdentifier] = (0, import_react.useState)("");
@@ -11849,7 +11879,7 @@ function Login() {
 								onChange: (e) => setIdentifier(e.target.value),
 								autoComplete: mode === "phone" ? "tel" : "username",
 								inputMode: mode === "phone" ? "tel" : "email",
-								placeholder: mode === "phone" ? "(609) 555-0100" : "Admin or you@email.com",
+								placeholder: mode === "phone" ? "(609) 555-0100" : "you@email.com or username",
 								required: true
 							})]
 						}),
@@ -11861,6 +11891,7 @@ function Login() {
 								value: password,
 								onChange: (e) => setPassword(e.target.value),
 								autoComplete: tab === "up" ? "new-password" : "current-password",
+								placeholder: "Password",
 								minLength: 8,
 								required: true
 							})]
@@ -12631,7 +12662,7 @@ async function printOrderReceipts(opts) {
 }
 //#endregion
 //#region src/routes/pair-printer.tsx
-var Route$17 = createFileRoute("/pair-printer")({ component: PairPrinterPage });
+var Route$19 = createFileRoute("/pair-printer")({ component: PairPrinterPage });
 function PairPrinterPage() {
 	const [busy, setBusy] = (0, import_react.useState)(false);
 	const [msg, setMsg] = (0, import_react.useState)("");
@@ -12731,7 +12762,7 @@ function PairPrinterPage() {
 }
 //#endregion
 //#region src/routes/recover.tsx
-var Route$16 = createFileRoute("/recover")({ component: Recover });
+var Route$18 = createFileRoute("/recover")({ component: Recover });
 function Recover() {
 	const [identifier, setIdentifier] = (0, import_react.useState)("");
 	const [proof, setProof] = (0, import_react.useState)("");
@@ -12865,7 +12896,7 @@ function safeNext(raw) {
 	if (!raw.startsWith("/") || raw.startsWith("//") || raw.startsWith("/login")) return void 0;
 	return raw;
 }
-var Route$15 = createFileRoute("/verify-2fa")({
+var Route$17 = createFileRoute("/verify-2fa")({
 	validateSearch: (search) => {
 		const next = safeNext(search.next);
 		return next ? { next } : {};
@@ -12874,7 +12905,7 @@ var Route$15 = createFileRoute("/verify-2fa")({
 });
 function Verify2fa() {
 	const { user, isPending } = useCurrentUserState();
-	const { next } = Route$15.useSearch();
+	const { next } = Route$17.useSearch();
 	const [code, setCode] = (0, import_react.useState)("");
 	const [error, setError] = (0, import_react.useState)("");
 	const [busy, setBusy] = (0, import_react.useState)(false);
@@ -12937,7 +12968,7 @@ function Verify2fa() {
 }
 //#endregion
 //#region src/routes/admin/index.tsx
-var Route$14 = createFileRoute("/admin/")({ component: () => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Navigate, { to: "/admin/menu" }) });
+var Route$16 = createFileRoute("/admin/")({ component: () => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Navigate, { to: "/admin/menu" }) });
 //#endregion
 //#region src/lib/image-file.ts
 var TYPES = [
@@ -12992,7 +13023,7 @@ async function fileToDataImage(file, opts) {
 }
 //#endregion
 //#region src/routes/admin/background.tsx
-var Route$13 = createFileRoute("/admin/background")({ component: AdminBackground });
+var Route$15 = createFileRoute("/admin/background")({ component: AdminBackground });
 function AdminBackground() {
 	const [backdrop, setBackdrop] = (0, import_react.useState)("");
 	const [backdropPreview, setBackdropPreview] = (0, import_react.useState)("");
@@ -13277,6 +13308,305 @@ function AdminBackground() {
 	});
 }
 //#endregion
+//#region src/lib/bot/bot-admin.ts
+function bool(v) {
+	return v === true || v === "t" || v === "true";
+}
+async function requireAdmin(userId) {
+	const sql = await getSql();
+	if ((await sql`select role from profiles where user_id = ${userId}`)[0]?.role !== "admin") {
+		const err = /* @__PURE__ */ new Error("Forbidden");
+		err.status = 403;
+		throw err;
+	}
+	if (bool((await sql`select totp_enabled from profiles where user_id = ${userId}`)[0]?.totp_enabled)) {
+		const exp = (await sql`select expires_at from two_factor_unlocks where user_id = ${userId}`)[0]?.expires_at;
+		if (!exp || new Date(String(exp)).getTime() <= Date.now()) throw new Error("Two-factor verification required.");
+	}
+}
+function asAgent(row) {
+	const scopes = Array.isArray(row.scopes) ? row.scopes.map((s) => String(s)) : [];
+	return {
+		id: String(row.id),
+		name: String(row.name ?? ""),
+		role: isBotRole(String(row.role ?? "")) ? String(row.role) : "ops_read",
+		scopes,
+		enabled: bool(row.enabled),
+		createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : String(row.created_at ?? ""),
+		lastUsedAt: row.last_used_at ? row.last_used_at instanceof Date ? row.last_used_at.toISOString() : String(row.last_used_at) : null,
+		expiresAt: row.expires_at ? row.expires_at instanceof Date ? row.expires_at.toISOString() : String(row.expires_at) : null
+	};
+}
+var listBotAgents = createServerFn({ method: "GET" }).middleware([authMiddleware]).handler(async ({ context }) => {
+	await requireAdmin(context.userId);
+	return (await (await getSql())`select id, name, role, scopes, enabled, created_at, last_used_at, expires_at
+      from bot_agents order by name`).map((row) => asAgent(row));
+});
+var listBotAudit = createServerFn({ method: "GET" }).middleware([authMiddleware]).handler(async ({ context }) => {
+	await requireAdmin(context.userId);
+	return (await (await getSql())`
+      select a.id, a.agent_id, coalesce(b.name, '') as name, a.path, a.status, a.ip, a.created_at
+      from bot_audit a
+      left join bot_agents b on b.id = a.agent_id
+      order by a.created_at desc
+      limit 40`).map((row) => ({
+		id: String(row.id),
+		agentId: String(row.agent_id ?? ""),
+		name: String(row.name ?? ""),
+		path: String(row.path ?? ""),
+		status: Number(row.status) || 0,
+		ip: String(row.ip ?? ""),
+		createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : String(row.created_at ?? "")
+	}));
+});
+var createBotAgent = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator((data) => data).handler(async ({ context, data }) => {
+	await requireAdmin(context.userId);
+	const { hashBotToken, mintBotToken } = await import("./tokens.server.mjs").then((n) => n.r);
+	const preset = BOT_PRESETS.find((p) => p.name === String(data.preset ?? "").trim());
+	const roleRaw = preset?.role ?? String(data.role ?? "").trim();
+	if (!isBotRole(roleRaw)) throw new Error("Pick a valid bot role.");
+	const name = (preset?.name ?? String(data.name ?? "").trim().toLowerCase()).replace(/[^a-z0-9-]/g, "");
+	if (name.length < 2 || name.length > 40) throw new Error("Bot name must be 2–40 letters, numbers, or dashes.");
+	const scopes = preset ? scopesForPreset(preset) : scopesForRole(roleRaw);
+	const token = mintBotToken();
+	const id = `bot-${randomBytes(8).toString("hex")}`;
+	const sql = await getSql();
+	if ((await sql.query(`select id from bot_agents where name = $1 limit 1`, [name]))[0]) throw new Error("A bot with that name already exists. Rotate its token instead.");
+	await sql.query(`insert into bot_agents (id, name, role, token_hash, scopes, enabled, created_by)
+       values ($1,$2,$3,$4,$5::text[], true, $6)`, [
+		id,
+		name,
+		roleRaw,
+		hashBotToken(token),
+		scopes,
+		context.userId
+	]);
+	return {
+		agent: asAgent((await sql`select id, name, role, scopes, enabled, created_at, last_used_at, expires_at from bot_agents where id = ${id}`)[0] ?? {
+			id,
+			name,
+			role: roleRaw,
+			scopes,
+			enabled: true
+		}),
+		token
+	};
+});
+var rotateBotAgent = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator((data) => data).handler(async ({ context, data }) => {
+	await requireAdmin(context.userId);
+	const { hashBotToken, mintBotToken } = await import("./tokens.server.mjs").then((n) => n.r);
+	const id = String(data.id ?? "").trim();
+	if (!id) throw new Error("Bot is missing.");
+	const token = mintBotToken();
+	const updated = await (await getSql()).query(`update bot_agents set token_hash = $1, enabled = true, last_used_at = null where id = $2 returning id, name, role, scopes, enabled, created_at, last_used_at, expires_at`, [hashBotToken(token), id]);
+	if (!updated[0]) throw new Error("Bot not found.");
+	return {
+		agent: asAgent(updated[0]),
+		token
+	};
+});
+var revokeBotAgent = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator((data) => data).handler(async ({ context, data }) => {
+	await requireAdmin(context.userId);
+	const { hashBotToken, mintBotToken } = await import("./tokens.server.mjs").then((n) => n.r);
+	const id = String(data.id ?? "").trim();
+	if (!id) throw new Error("Bot is missing.");
+	await (await getSql()).query(`update bot_agents set enabled = false, token_hash = $1 where id = $2`, [hashBotToken(mintBotToken()), id]);
+	return { ok: true };
+});
+//#endregion
+//#region src/routes/admin/bots.tsx
+var Route$14 = createFileRoute("/admin/bots")({ component: AdminBots });
+function AdminBots() {
+	const [agents, setAgents] = (0, import_react.useState)([]);
+	const [audit, setAudit] = (0, import_react.useState)([]);
+	const [preset, setPreset] = (0, import_react.useState)(BOT_PRESETS[0]?.name ?? "security-guard");
+	const [busy, setBusy] = (0, import_react.useState)("");
+	const [msg, setMsg] = (0, import_react.useState)("");
+	const [issued, setIssued] = (0, import_react.useState)(null);
+	function reload() {
+		listBotAgents().then(setAgents).catch((e) => setMsg(e instanceof Error ? e.message : "Could not load bots"));
+		listBotAudit().then(setAudit).catch(() => setAudit([]));
+	}
+	(0, import_react.useEffect)(() => {
+		reload();
+	}, []);
+	function copyToken(token) {
+		navigator.clipboard.writeText(token).then(() => setMsg("Token copied. Store it as a bot secret — it will not be shown again."));
+	}
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+		className: "settings-page",
+		children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("header", {
+				className: "page-card",
+				children: [
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+						className: "shop-brand-kicker",
+						children: "Admin"
+					}),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h1", { children: "Bot access" }),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+						className: "ed-sub",
+						children: "Each bot gets its own token and the least scopes it needs. Bots never sign in as Admin. The raw token is shown once — copy it into the bot’s secret store, then treat it like a password."
+					})
+				]
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
+				className: "page-card",
+				children: [
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", { children: "Create an agent" }),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+						className: "two-col",
+						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", {
+							className: "ed-field",
+							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Preset" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("select", {
+								className: "ed-input",
+								value: preset,
+								onChange: (e) => setPreset(e.target.value),
+								children: BOT_PRESETS.map((p) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", {
+									value: p.name,
+									children: p.label
+								}, p.name))
+							})]
+						}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+							className: "ed-field",
+							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Issue" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+								type: "button",
+								className: "btn-print",
+								disabled: Boolean(busy),
+								onClick: () => {
+									setBusy("create");
+									setMsg("");
+									createBotAgent({ data: { preset } }).then((r) => {
+										setIssued({
+											name: r.agent.name,
+											token: r.token
+										});
+										setAgents((list) => [...list.filter((a) => a.id !== r.agent.id), r.agent].sort((a, b) => a.name.localeCompare(b.name)));
+									}).catch((e) => setMsg(e instanceof Error ? e.message : "Could not create bot")).finally(() => setBusy(""));
+								},
+								children: busy === "create" ? "Creating…" : "Create token"
+							})]
+						})]
+					}),
+					issued ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+						className: "bot-token-box",
+						children: [
+							/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
+								className: "ed-sub",
+								children: [
+									"Token for ",
+									/* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: issued.name }),
+									" — copy now. Closing this page hides it."
+								]
+							}),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("code", {
+								className: "totp-secret",
+								children: issued.token
+							}),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
+								type: "button",
+								className: "ed-btn",
+								onClick: () => copyToken(issued.token),
+								children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Copy, { size: 16 }), "Copy token"]
+							})
+						]
+					}) : null,
+					msg ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+						className: "ed-sub",
+						children: msg
+					}) : null
+				]
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
+				className: "page-card",
+				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", { children: "Agents" }), agents.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+					className: "ed-empty",
+					children: "No bots yet. Create a Security Guard or POS token to start."
+				}) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+					className: "table-wrap",
+					children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("table", {
+						className: "plain-table",
+						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("thead", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("tr", { children: [
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { children: "Name" }),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { children: "Role" }),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { children: "Scopes" }),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { children: "Last used" }),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {})
+						] }) }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("tbody", { children: agents.map((agent) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("tr", { children: [
+							/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("td", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: agent.name }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+								className: "bot-agent-state",
+								children: agent.enabled ? "Active" : "Revoked"
+							})] }),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", { children: agent.role.replaceAll("_", " ") }),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", { children: agent.scopes.join(", ") || "—" }),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", { children: agent.lastUsedAt ? formatShopWhen(agent.lastUsedAt) : "Never" }),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+								className: "order-actions",
+								children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+									type: "button",
+									className: "ed-btn",
+									disabled: Boolean(busy),
+									onClick: () => {
+										setBusy(agent.id);
+										setMsg("");
+										rotateBotAgent({ data: { id: agent.id } }).then((r) => {
+											setIssued({
+												name: r.agent.name,
+												token: r.token
+											});
+											setAgents((list) => list.map((a) => a.id === r.agent.id ? r.agent : a));
+										}).catch((e) => setMsg(e instanceof Error ? e.message : "Could not rotate")).finally(() => setBusy(""));
+									},
+									children: "Rotate"
+								}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+									type: "button",
+									className: "ed-btn ed-btn-danger",
+									disabled: Boolean(busy) || !agent.enabled,
+									onClick: () => {
+										setBusy(agent.id);
+										setMsg("");
+										revokeBotAgent({ data: { id: agent.id } }).then(() => {
+											setAgents((list) => list.map((a) => a.id === agent.id ? {
+												...a,
+												enabled: false
+											} : a));
+											if (issued?.name === agent.name) setIssued(null);
+										}).catch((e) => setMsg(e instanceof Error ? e.message : "Could not revoke")).finally(() => setBusy(""));
+									},
+									children: "Revoke"
+								})]
+							}) })
+						] }, agent.id)) })]
+					})
+				})]
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
+				className: "page-card",
+				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", { children: "Recent bot calls" }), audit.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+					className: "ed-empty",
+					children: "No bot traffic yet."
+				}) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+					className: "table-wrap",
+					children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("table", {
+						className: "plain-table",
+						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("thead", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("tr", { children: [
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { children: "When" }),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { children: "Bot" }),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { children: "Path" }),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { children: "Status" })
+						] }) }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("tbody", { children: audit.map((row) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("tr", { children: [
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", { children: formatShopWhen(row.createdAt) }),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", { children: row.name || "—" }),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", { children: row.path }),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", { children: row.status })
+						] }, row.id)) })]
+					})
+				})]
+			})
+		]
+	});
+}
+//#endregion
 //#region src/components/customers-panel.tsx
 function CustomersPanel({ customers, setCustomers, onMsg, onMessage, focusId }) {
 	const [query, setQuery] = (0, import_react.useState)("");
@@ -13510,7 +13840,7 @@ function PaymentProcessorPanel() {
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", { children: "Payment processor" }),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 				className: "ed-sub",
-				children: "These fields are the shop inputs for a card processor. They are shown so the wiring is ready — nothing is charged and nothing is saved until the processor is connected."
+				children: "Card capture is frozen. These fields are the shop inputs for a future processor — nothing is charged and nothing is saved until Stripe, Square, or another processor is connected."
 			}),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("fieldset", {
 				className: "pay-soon-fields",
@@ -13825,15 +14155,12 @@ function PaymentsPanel({ settings, setSettings }) {
 				})]
 			}),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", {
-				className: "pay-opt",
+				className: "pay-opt pay-disabled",
 				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
 					type: "checkbox",
-					checked: settings.guestCardRequired,
-					onChange: (e) => setSettings({
-						...settings,
-						guestCardRequired: e.target.checked
-					})
-				}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { children: ["Require card payment for guests", /* @__PURE__ */ (0, import_jsx_runtime.jsx)("em", { children: "Guests cannot pay at pickup or with cash. Signed-in customers still can." })] })]
+					checked: false,
+					disabled: true
+				}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { children: ["Require card payment for guests", /* @__PURE__ */ (0, import_jsx_runtime.jsx)("em", { children: "Card is not live yet. Guests pay at pickup or with cash." })] })]
 			})
 		]
 	}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PaymentProcessorPanel, {})] });
@@ -14131,7 +14458,7 @@ function SaveToast({ toast }) {
 }
 //#endregion
 //#region src/routes/admin/settings.tsx
-var Route$12 = createFileRoute("/admin/settings")({
+var Route$13 = createFileRoute("/admin/settings")({
 	validateSearch: (search) => {
 		const tab = typeof search.tab === "string" ? search.tab : void 0;
 		return tab ? { tab } : {};
@@ -14139,7 +14466,7 @@ var Route$12 = createFileRoute("/admin/settings")({
 	component: AdminSettingsGate
 });
 function AdminSettingsGate() {
-	const { tab } = Route$12.useSearch();
+	const { tab } = Route$13.useSearch();
 	if (tab === "customers") return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Navigate, {
 		to: "/admin/center",
 		search: { tab: "customers" }
@@ -15514,7 +15841,7 @@ var TABS$1 = /* @__PURE__ */ new Set([
 	"customers",
 	"rewards"
 ]);
-var Route$11 = createFileRoute("/admin/center")({
+var Route$12 = createFileRoute("/admin/center")({
 	validateSearch: (search) => {
 		const tab = typeof search.tab === "string" && TABS$1.has(search.tab) ? search.tab : void 0;
 		const thread = typeof search.thread === "string" && search.thread.trim() ? search.thread.trim() : void 0;
@@ -15528,7 +15855,7 @@ var Route$11 = createFileRoute("/admin/center")({
 	component: AdminCenter
 });
 function AdminCenter() {
-	const { tab, thread, customer } = Route$11.useSearch();
+	const { tab, thread, customer } = Route$12.useSearch();
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CustomerCenter, {
 		tab: tab ?? "messages",
 		thread,
@@ -15537,13 +15864,13 @@ function AdminCenter() {
 }
 //#endregion
 //#region src/routes/admin/customers.tsx
-var Route$10 = createFileRoute("/admin/customers")({ component: () => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Navigate, {
+var Route$11 = createFileRoute("/admin/customers")({ component: () => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Navigate, {
 	to: "/admin/center",
 	search: { tab: "customers" }
 }) });
 //#endregion
 //#region src/routes/admin/financials.tsx
-var Route$9 = createFileRoute("/admin/financials")({ component: AdminFinancialsPage });
+var Route$10 = createFileRoute("/admin/financials")({ component: AdminFinancialsPage });
 //#endregion
 //#region src/components/menu-editor.tsx
 var KINDS = [
@@ -17158,7 +17485,7 @@ var TABS = [
 	"delivery",
 	"printers"
 ];
-var Route$8 = createFileRoute("/admin/menu")({
+var Route$9 = createFileRoute("/admin/menu")({
 	validateSearch: (search) => {
 		const raw = typeof search.tab === "string" ? search.tab : void 0;
 		const tab = raw === "vacation" ? "hours" : raw;
@@ -17168,7 +17495,7 @@ var Route$8 = createFileRoute("/admin/menu")({
 	component: AdminMenu
 });
 function AdminMenu() {
-	const { tab: wanted } = Route$8.useSearch();
+	const { tab: wanted } = Route$9.useSearch();
 	const tab = wanted ?? "menu";
 	const [msg, setMsg] = (0, import_react.useState)("");
 	const [settings, setSettings] = (0, import_react.useState)(null);
@@ -17178,7 +17505,7 @@ function AdminMenu() {
 	const [cells, setCells] = (0, import_react.useState)([]);
 	const [restaurant, setRestaurant] = (0, import_react.useState)(null);
 	const { toast, flashOk, flashFail } = useSaveFlash();
-	const navigate = Route$8.useNavigate();
+	const navigate = Route$9.useNavigate();
 	(0, import_react.useEffect)(() => {
 		useMenuStore.persist.rehydrate();
 		getAdminShop().then((d) => {
@@ -17495,19 +17822,29 @@ function AdminMenu() {
 }
 //#endregion
 //#region src/routes/admin/messages.tsx
-var Route$7 = createFileRoute("/admin/messages")({ component: () => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Navigate, {
+var Route$8 = createFileRoute("/admin/messages")({ component: () => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Navigate, {
 	to: "/admin/center",
 	search: { tab: "messages" }
 }) });
 //#endregion
 //#region src/routes/admin/orders.tsx
-var Route$6 = createFileRoute("/admin/orders")({ component: () => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Navigate, {
+var Route$7 = createFileRoute("/admin/orders")({ component: () => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Navigate, {
 	to: "/admin/center",
 	search: { tab: "orders" }
 }) });
 //#endregion
 //#region src/data/patches.ts
 var PATCHES = [
+	{
+		id: "2026-09-10-security-bot-access",
+		date: "September 10, 2026",
+		title: "Desk security and bot access",
+		added: [
+			"Shop Admin password lives only in host secrets now, and Admin must enroll an authenticator before the desk opens.",
+			"Live card capture is frozen — checkout is cash or pay at pickup until a real processor is wired.",
+			"Bots get their own tokens under Admin → Bot access, with least-privilege scopes and a one-time copy."
+		]
+	},
 	{
 		id: "2026-09-10-pos-accept-queue",
 		date: "September 10, 2026",
@@ -17830,7 +18167,7 @@ var PATCHES = [
 ];
 //#endregion
 //#region src/routes/admin/patches.tsx
-var Route$5 = createFileRoute("/admin/patches")({ component: AdminPatches });
+var Route$6 = createFileRoute("/admin/patches")({ component: AdminPatches });
 function AdminPatches() {
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 		className: "patches-page",
@@ -17865,7 +18202,7 @@ function AdminPatches() {
 }
 //#endregion
 //#region src/routes/admin/pos.tsx
-var Route$4 = createFileRoute("/admin/pos")({
+var Route$5 = createFileRoute("/admin/pos")({
 	validateSearch: (search) => {
 		const ticket = typeof search.ticket === "string" ? search.ticket : void 0;
 		return ticket ? { ticket } : {};
@@ -18159,7 +18496,7 @@ function PosTicketDialog({ ticket, itemQuery, menuHits, busyId, onClose, onQuery
 	});
 }
 function AdminPos() {
-	const { ticket } = Route$4.useSearch();
+	const { ticket } = Route$5.useSearch();
 	const [tickets, setTickets] = (0, import_react.useState)([]);
 	const [openId, setOpenId] = (0, import_react.useState)("");
 	const [error, setError] = (0, import_react.useState)("");
@@ -18549,162 +18886,415 @@ function AdminPos() {
 }
 //#endregion
 //#region src/routes/admin/rewards.tsx
-var Route$3 = createFileRoute("/admin/rewards")({ component: () => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Navigate, {
+var Route$4 = createFileRoute("/admin/rewards")({ component: () => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Navigate, {
 	to: "/admin/center",
 	search: { tab: "rewards" }
 }) });
 //#endregion
 //#region src/routes/admin/service.tsx
-var Route$2 = createFileRoute("/admin/service")({ component: () => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Navigate, {
+var Route$3 = createFileRoute("/admin/service")({ component: () => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Navigate, {
 	to: "/admin/center",
 	search: { tab: "messages" }
 }) });
 //#endregion
 //#region src/routes/admin/zones.tsx
-var Route$1 = createFileRoute("/admin/zones")({ component: () => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Navigate, {
+var Route$2 = createFileRoute("/admin/zones")({ component: () => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Navigate, {
 	to: "/admin/menu",
 	search: { tab: "delivery" }
 }) });
 //#endregion
 //#region src/routes/api/auth/$.ts
-var Route = createFileRoute("/api/auth/$")({ server: { handlers: {
+var Route$1 = createFileRoute("/api/auth/$")({ server: { handlers: {
 	GET: ({ request }) => auth.handler(request),
 	POST: ({ request }) => auth.handler(request)
 } } });
 //#endregion
+//#region src/lib/bot/audit.server.ts
+async function writeBotAudit(input) {
+	try {
+		await (await getSql()).query(`insert into bot_audit (id, agent_id, path, status, ip) values ($1,$2,$3,$4,$5)`, [
+			`aud-${randomBytes(10).toString("hex")}`,
+			input.agentId ?? null,
+			input.path.slice(0, 240),
+			input.status,
+			input.ip.slice(0, 80)
+		]);
+	} catch (err) {
+		console.error("[southend] bot audit write failed", err);
+	}
+}
+function requestIp(request) {
+	const forwarded = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
+	if (forwarded) return forwarded;
+	return request.headers.get("x-real-ip")?.trim() || "";
+}
+//#endregion
+//#region src/routes/api/bot/v1/$.ts
+var KITCHEN_STATUSES = /* @__PURE__ */ new Set([
+	"accepted",
+	"preparing",
+	"ready",
+	"out_for_delivery",
+	"completed",
+	"canceled"
+]);
+function json(body, status = 200) {
+	return new Response(JSON.stringify(body), {
+		status,
+		headers: {
+			"content-type": "application/json; charset=utf-8",
+			"cache-control": "no-store"
+		}
+	});
+}
+function pathOf(request) {
+	try {
+		return new URL(request.url).pathname.replace(/\/+$/, "") || "/";
+	} catch {
+		return "/";
+	}
+}
+function routeKey(pathname) {
+	return pathname.replace(/^\/api\/bot\/v1\/?/, "") || "health";
+}
+async function requireAgent(request, scope) {
+	const agent = await verifyBotBearer(request);
+	if (!agent) return json({ error: "unauthorized" }, 401);
+	if (!rateLimitBot(agent.id)) return json({ error: "rate_limited" }, 429);
+	if (scope && !agentHasScope(agent, scope)) return json({
+		error: "forbidden",
+		scope
+	}, 403);
+	return { agent };
+}
+async function handle(request) {
+	const pathname = pathOf(request);
+	const key = routeKey(pathname);
+	const ip = requestIp(request);
+	let agentId = null;
+	let status = 200;
+	const reply = (body, code = 200) => {
+		status = code;
+		return json(body, code);
+	};
+	try {
+		if (request.method === "GET" && (key === "health" || key === "")) {
+			const authed = request.headers.get("authorization") ? await verifyBotBearer(request) : null;
+			agentId = authed?.id ?? null;
+			return reply({
+				ok: true,
+				service: "southend-bot",
+				auth: authed ? authed.name : "optional",
+				cardProcessor: "disabled"
+			});
+		}
+		if (request.method === "GET" && key === "security/summary") {
+			const gate = await requireAgent(request, "security.summary");
+			if (gate instanceof Response) {
+				status = gate.status;
+				return gate;
+			}
+			agentId = gate.agent.id;
+			const sql = await getSql();
+			const counts = await sql.query(`select count(*)::int as n, count(*) filter (where enabled)::int as enabled from bot_agents`);
+			const totp = await sql.query(`select count(*)::int as n from profiles where totp_enabled = true and role = 'admin'`);
+			return reply({
+				db: dbSource,
+				production: isVercelProduction(),
+				neon: dbSource === "neon",
+				staffSecretConfigured: staffSecretConfigured(),
+				trustedOrigins: isVercelProduction() ? PRODUCTION_AUTH_ORIGINS : "preview-dynamic",
+				cardProcessor: "disabled",
+				adminTotp: Math.round(Number(totp[0]?.n) || 0),
+				agents: {
+					total: Math.round(Number(counts[0]?.n) || 0),
+					enabled: Math.round(Number(counts[0]?.enabled) || 0)
+				}
+			});
+		}
+		if (request.method === "GET" && key === "deploy/status") {
+			const gate = await requireAgent(request, "deploy.status.read");
+			if (gate instanceof Response) {
+				status = gate.status;
+				return gate;
+			}
+			agentId = gate.agent.id;
+			return reply({
+				production: isVercelProduction(),
+				db: dbSource,
+				env: isVercelProduction() ? "production" : "preview"
+			});
+		}
+		if (request.method === "GET" && key === "auth/audit") {
+			const gate = await requireAgent(request, "auth.audit.read");
+			if (gate instanceof Response) {
+				status = gate.status;
+				return gate;
+			}
+			agentId = gate.agent.id;
+			return reply({ recent: (await (await getSql())`
+        select a.path, a.status, a.created_at, coalesce(b.name, '') as name
+        from bot_audit a
+        left join bot_agents b on b.id = a.agent_id
+        order by a.created_at desc
+        limit 25`).map((row) => ({
+				path: String(row.path ?? ""),
+				status: Number(row.status) || 0,
+				name: String(row.name ?? ""),
+				at: row.created_at instanceof Date ? row.created_at.toISOString() : String(row.created_at ?? "")
+			})) });
+		}
+		if (request.method === "GET" && key === "orders/recent") {
+			const gate = await requireAgent(request, "orders.read");
+			if (gate instanceof Response) {
+				status = gate.status;
+				return gate;
+			}
+			agentId = gate.agent.id;
+			return reply({ orders: (await (await getSql())`
+        select id, ticket_no, status, fulfillment, total, payment_method, created_at, scheduled_for
+        from orders
+        order by created_at desc
+        limit 25`).map((row) => ({
+				id: String(row.id),
+				ticketNo: Math.round(Number(row.ticket_no) || 0),
+				status: String(row.status ?? ""),
+				fulfillment: String(row.fulfillment ?? ""),
+				total: String(row.total ?? "0"),
+				paymentMethod: String(row.payment_method ?? ""),
+				createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : String(row.created_at ?? ""),
+				scheduledFor: row.scheduled_for ? row.scheduled_for instanceof Date ? row.scheduled_for.toISOString() : String(row.scheduled_for) : null
+			})) });
+		}
+		if (request.method === "GET" && key === "menu") {
+			const gate = await requireAgent(request, "menu.read");
+			if (gate instanceof Response) {
+				status = gate.status;
+				return gate;
+			}
+			agentId = gate.agent.id;
+			const sql = await getSql();
+			const cats = await sql`select id, name, kind from menu_categories order by sort_order, name`;
+			const items = await sql`select id, category_id, name, prices from menu_items order by sort_order, name`;
+			return reply({
+				categories: cats.map((c) => ({
+					id: String(c.id),
+					name: String(c.name ?? ""),
+					kind: String(c.kind ?? "")
+				})),
+				items: items.map((it) => ({
+					id: String(it.id),
+					categoryId: String(it.category_id ?? ""),
+					name: String(it.name ?? "")
+				}))
+			});
+		}
+		if (request.method === "GET" && key === "payments") {
+			const gate = await requireAgent(request, "payments.read");
+			if (gate instanceof Response) {
+				status = gate.status;
+				return gate;
+			}
+			agentId = gate.agent.id;
+			const row = (await (await getSql()).query(`select count(*)::int as n, coalesce(sum(total), 0)::text as collected
+           from orders where status <> 'canceled'`))[0];
+			return reply({
+				processor: "disabled",
+				tickets: Math.round(Number(row?.n) || 0),
+				collected: row?.collected ?? "0"
+			});
+		}
+		if (request.method === "POST" && key === "orders/status") {
+			const gate = await requireAgent(request, "orders.update_status");
+			if (gate instanceof Response) {
+				status = gate.status;
+				return gate;
+			}
+			agentId = gate.agent.id;
+			const body = await request.json().catch(() => ({}));
+			const id = String(body.id ?? "").trim();
+			const next = String(body.status ?? "").trim();
+			if (!id) return reply({ error: "missing_id" }, 400);
+			if (!KITCHEN_STATUSES.has(next)) return reply({ error: "invalid_status" }, 400);
+			const updated = await (await getSql()).query(`update orders set status = $1, accepted_at = case when $1 in ('accepted','preparing') then coalesce(accepted_at, now()) else accepted_at end
+         where id = $2 returning id, ticket_no, status`, [next, id]);
+			if (!updated[0]) return reply({ error: "not_found" }, 404);
+			return reply({
+				ok: true,
+				id: String(updated[0].id),
+				ticketNo: Math.round(Number(updated[0].ticket_no) || 0),
+				status: String(updated[0].status ?? next)
+			});
+		}
+		return reply({ error: "not_found" }, 404);
+	} catch (err) {
+		const message = err instanceof Error ? err.message : "error";
+		if (/Production requires DATABASE_URL/i.test(message)) return reply({ error: "neon_required" }, 503);
+		console.error("[southend] bot api", err);
+		return reply({ error: "server_error" }, 500);
+	} finally {
+		writeBotAudit({
+			agentId,
+			path: pathname,
+			status,
+			ip
+		});
+	}
+}
+var Route = createFileRoute("/api/bot/v1/$")({ server: { handlers: {
+	GET: ({ request }) => handle(request),
+	POST: ({ request }) => handle(request)
+} } });
+//#endregion
 //#region src/routeTree.gen.ts
-var IndexRoute = Route$25.update({
+var IndexRoute = Route$28.update({
 	id: "/",
 	path: "/",
-	getParentRoute: () => Route$26
+	getParentRoute: () => Route$29
 });
-var AccountRoute = Route$24.update({
+var AccountRoute = Route$27.update({
 	id: "/account",
 	path: "/account",
-	getParentRoute: () => Route$26
+	getParentRoute: () => Route$29
 });
-var AdminRoute = Route$23.update({
+var AdminRoute = Route$26.update({
 	id: "/admin",
 	path: "/admin",
-	getParentRoute: () => Route$26
+	getParentRoute: () => Route$29
 });
-var BoardRoute = Route$22.update({
+var BoardRoute = Route$25.update({
 	id: "/board",
 	path: "/board",
-	getParentRoute: () => Route$26
+	getParentRoute: () => Route$29
 });
-var CheckoutRoute = Route$21.update({
+var CheckoutRoute = Route$24.update({
 	id: "/checkout",
 	path: "/checkout",
-	getParentRoute: () => Route$26
+	getParentRoute: () => Route$29
 });
-var HelpRoute = Route$20.update({
+var Enroll2faRoute = Route$23.update({
+	id: "/enroll-2fa",
+	path: "/enroll-2fa",
+	getParentRoute: () => Route$29
+});
+var HelpRoute = Route$22.update({
 	id: "/help",
 	path: "/help",
-	getParentRoute: () => Route$26
+	getParentRoute: () => Route$29
 });
-var InstallRoute = Route$19.update({
+var InstallRoute = Route$21.update({
 	id: "/install",
 	path: "/install",
-	getParentRoute: () => Route$26
+	getParentRoute: () => Route$29
 });
-var LoginRoute = Route$18.update({
+var LoginRoute = Route$20.update({
 	id: "/login",
 	path: "/login",
-	getParentRoute: () => Route$26
+	getParentRoute: () => Route$29
 });
-var PairPrinterRoute = Route$17.update({
+var PairPrinterRoute = Route$19.update({
 	id: "/pair-printer",
 	path: "/pair-printer",
-	getParentRoute: () => Route$26
+	getParentRoute: () => Route$29
 });
-var RecoverRoute = Route$16.update({
+var RecoverRoute = Route$18.update({
 	id: "/recover",
 	path: "/recover",
-	getParentRoute: () => Route$26
+	getParentRoute: () => Route$29
 });
-var Verify2faRoute = Route$15.update({
+var Verify2faRoute = Route$17.update({
 	id: "/verify-2fa",
 	path: "/verify-2fa",
-	getParentRoute: () => Route$26
+	getParentRoute: () => Route$29
 });
-var AdminIndexRoute = Route$14.update({
+var AdminIndexRoute = Route$16.update({
 	id: "/",
 	path: "/",
 	getParentRoute: () => AdminRoute
 });
-var AdminBackgroundRoute = Route$13.update({
+var AdminBackgroundRoute = Route$15.update({
 	id: "/background",
 	path: "/background",
 	getParentRoute: () => AdminRoute
 });
-var AdminCenterRoute = Route$11.update({
+var AdminBotsRoute = Route$14.update({
+	id: "/bots",
+	path: "/bots",
+	getParentRoute: () => AdminRoute
+});
+var AdminCenterRoute = Route$12.update({
 	id: "/center",
 	path: "/center",
 	getParentRoute: () => AdminRoute
 });
-var AdminCustomersRoute = Route$10.update({
+var AdminCustomersRoute = Route$11.update({
 	id: "/customers",
 	path: "/customers",
 	getParentRoute: () => AdminRoute
 });
-var AdminFinancialsRoute = Route$9.update({
+var AdminFinancialsRoute = Route$10.update({
 	id: "/financials",
 	path: "/financials",
 	getParentRoute: () => AdminRoute
 });
-var AdminMenuRoute = Route$8.update({
+var AdminMenuRoute = Route$9.update({
 	id: "/menu",
 	path: "/menu",
 	getParentRoute: () => AdminRoute
 });
-var AdminMessagesRoute = Route$7.update({
+var AdminMessagesRoute = Route$8.update({
 	id: "/messages",
 	path: "/messages",
 	getParentRoute: () => AdminRoute
 });
-var AdminOrdersRoute = Route$6.update({
+var AdminOrdersRoute = Route$7.update({
 	id: "/orders",
 	path: "/orders",
 	getParentRoute: () => AdminRoute
 });
-var AdminPatchesRoute = Route$5.update({
+var AdminPatchesRoute = Route$6.update({
 	id: "/patches",
 	path: "/patches",
 	getParentRoute: () => AdminRoute
 });
-var AdminPosRoute = Route$4.update({
+var AdminPosRoute = Route$5.update({
 	id: "/pos",
 	path: "/pos",
 	getParentRoute: () => AdminRoute
 });
-var AdminRewardsRoute = Route$3.update({
+var AdminRewardsRoute = Route$4.update({
 	id: "/rewards",
 	path: "/rewards",
 	getParentRoute: () => AdminRoute
 });
-var AdminServiceRoute = Route$2.update({
+var AdminServiceRoute = Route$3.update({
 	id: "/service",
 	path: "/service",
 	getParentRoute: () => AdminRoute
 });
-var AdminSettingsRoute = Route$12.update({
+var AdminSettingsRoute = Route$13.update({
 	id: "/settings",
 	path: "/settings",
 	getParentRoute: () => AdminRoute
 });
-var AdminZonesRoute = Route$1.update({
+var AdminZonesRoute = Route$2.update({
 	id: "/zones",
 	path: "/zones",
 	getParentRoute: () => AdminRoute
 });
-var ApiAuthSplatRoute = Route.update({
+var ApiAuthSplatRoute = Route$1.update({
 	id: "/api/auth/$",
 	path: "/api/auth/$",
-	getParentRoute: () => Route$26
+	getParentRoute: () => Route$29
+});
+var ApiBotV1SplatRoute = Route.update({
+	id: "/api/bot/v1/$",
+	path: "/api/bot/v1/$",
+	getParentRoute: () => Route$29
 });
 var AdminRouteChildren = {
 	AdminBackgroundRoute,
+	AdminBotsRoute,
 	AdminCenterRoute,
 	AdminCustomersRoute,
 	AdminFinancialsRoute,
@@ -18725,15 +19315,17 @@ var rootRouteChildren = {
 	AdminRoute: AdminRoute._addFileChildren(AdminRouteChildren),
 	BoardRoute,
 	CheckoutRoute,
+	Enroll2faRoute,
 	HelpRoute,
 	InstallRoute,
 	LoginRoute,
 	PairPrinterRoute,
 	RecoverRoute,
 	Verify2faRoute,
-	ApiAuthSplatRoute
+	ApiAuthSplatRoute,
+	ApiBotV1SplatRoute
 };
-var routeTree = Route$26._addFileChildren(rootRouteChildren)._addFileTypes();
+var routeTree = Route$29._addFileChildren(rootRouteChildren)._addFileTypes();
 //#endregion
 //#region src/router.tsx
 function getRouter() {

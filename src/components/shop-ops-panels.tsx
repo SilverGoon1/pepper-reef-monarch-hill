@@ -151,15 +151,15 @@ export function PaymentsPanel({
             onChange={(e) => setSettings({ ...settings, paymentPlaceholder: e.target.value })}
           />
         </label>
-        <label className="pay-opt">
+        <label className="pay-opt pay-disabled">
           <input
             type="checkbox"
-            checked={settings.guestCardRequired}
-            onChange={(e) => setSettings({ ...settings, guestCardRequired: e.target.checked })}
+            checked={false}
+            disabled
           />
           <span>
             Require card payment for guests
-            <em>Guests cannot pay at pickup or with cash. Signed-in customers still can.</em>
+            <em>Card is not live yet. Guests pay at pickup or with cash.</em>
           </span>
         </label>
       </section>

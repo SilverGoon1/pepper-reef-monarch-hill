@@ -4,8 +4,8 @@ export function PaymentProcessorPanel() {
       <p className="soon-banner">Under construction</p>
       <h2>Payment processor</h2>
       <p className="ed-sub">
-        These fields are the shop inputs for a card processor. They are shown so the wiring is ready — nothing
-        is charged and nothing is saved until the processor is connected.
+        Card capture is frozen. These fields are the shop inputs for a future processor — nothing
+        is charged and nothing is saved until Stripe, Square, or another processor is connected.
       </p>
       <fieldset className="pay-soon-fields" disabled>
         <legend className="sr-only">Processor fields, not yet active</legend>

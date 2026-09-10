@@ -449,6 +449,9 @@ function AccountBody({ profile, tab }: { profile: ProfileView; tab: AccountTab }
               2FA — not SMS.
             </p>
             {totpOn ? (
+              profile.role === "admin" ? (
+                <p className="ed-sub">Shop admin two-factor stays on. You can rotate the authenticator from a new enrollment after a verified session.</p>
+              ) : (
               <form
                 className="login-form"
                 onSubmit={(e) => {
@@ -470,6 +473,7 @@ function AccountBody({ profile, tab }: { profile: ProfileView; tab: AccountTab }
                   Turn off 2FA
                 </button>
               </form>
+              )
             ) : (
               <div className="login-form">
                 <button

@@ -14,6 +14,7 @@ import { Route as AccountRouteImport } from './routes/account'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as BoardRouteImport } from './routes/board'
 import { Route as CheckoutRouteImport } from './routes/checkout'
+import { Route as Enroll2faRouteImport } from './routes/enroll-2fa'
 import { Route as HelpRouteImport } from './routes/help'
 import { Route as InstallRouteImport } from './routes/install'
 import { Route as LoginRouteImport } from './routes/login'
@@ -22,6 +23,7 @@ import { Route as RecoverRouteImport } from './routes/recover'
 import { Route as Verify2faRouteImport } from './routes/verify-2fa'
 import { Route as AdminIndexRouteImport } from './routes/admin/index'
 import { Route as AdminBackgroundRouteImport } from './routes/admin/background'
+import { Route as AdminBotsRouteImport } from './routes/admin/bots'
 import { Route as AdminCenterRouteImport } from './routes/admin/center'
 import { Route as AdminCustomersRouteImport } from './routes/admin/customers'
 import { Route as AdminFinancialsRouteImport } from './routes/admin/financials'
@@ -35,6 +37,7 @@ import { Route as AdminServiceRouteImport } from './routes/admin/service'
 import { Route as AdminSettingsRouteImport } from './routes/admin/settings'
 import { Route as AdminZonesRouteImport } from './routes/admin/zones'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
+import { Route as ApiBotV1SplatRouteImport } from './routes/api/bot/v1/$'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -59,6 +62,11 @@ const BoardRoute = BoardRouteImport.update({
 const CheckoutRoute = CheckoutRouteImport.update({
   id: '/checkout',
   path: '/checkout',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const Enroll2faRoute = Enroll2faRouteImport.update({
+  id: '/enroll-2fa',
+  path: '/enroll-2fa',
   getParentRoute: () => rootRouteImport,
 } as any)
 const HelpRoute = HelpRouteImport.update({
@@ -99,6 +107,11 @@ const AdminIndexRoute = AdminIndexRouteImport.update({
 const AdminBackgroundRoute = AdminBackgroundRouteImport.update({
   id: '/background',
   path: '/background',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminBotsRoute = AdminBotsRouteImport.update({
+  id: '/bots',
+  path: '/bots',
   getParentRoute: () => AdminRoute,
 } as any)
 const AdminCenterRoute = AdminCenterRouteImport.update({
@@ -166,6 +179,11 @@ const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   path: '/api/auth/$',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiBotV1SplatRoute = ApiBotV1SplatRouteImport.update({
+  id: '/api/bot/v1/$',
+  path: '/api/bot/v1/$',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -173,6 +191,7 @@ export interface FileRoutesByFullPath {
   '/admin': typeof AdminRouteWithChildren
   '/board': typeof BoardRoute
   '/checkout': typeof CheckoutRoute
+  '/enroll-2fa': typeof Enroll2faRoute
   '/help': typeof HelpRoute
   '/install': typeof InstallRoute
   '/login': typeof LoginRoute
@@ -180,6 +199,7 @@ export interface FileRoutesByFullPath {
   '/recover': typeof RecoverRoute
   '/verify-2fa': typeof Verify2faRoute
   '/admin/background': typeof AdminBackgroundRoute
+  '/admin/bots': typeof AdminBotsRoute
   '/admin/center': typeof AdminCenterRoute
   '/admin/customers': typeof AdminCustomersRoute
   '/admin/financials': typeof AdminFinancialsRoute
@@ -194,12 +214,14 @@ export interface FileRoutesByFullPath {
   '/admin/zones': typeof AdminZonesRoute
   '/admin/': typeof AdminIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/bot/v1/$': typeof ApiBotV1SplatRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/account': typeof AccountRoute
   '/board': typeof BoardRoute
   '/checkout': typeof CheckoutRoute
+  '/enroll-2fa': typeof Enroll2faRoute
   '/help': typeof HelpRoute
   '/install': typeof InstallRoute
   '/login': typeof LoginRoute
@@ -207,6 +229,7 @@ export interface FileRoutesByTo {
   '/recover': typeof RecoverRoute
   '/verify-2fa': typeof Verify2faRoute
   '/admin/background': typeof AdminBackgroundRoute
+  '/admin/bots': typeof AdminBotsRoute
   '/admin/center': typeof AdminCenterRoute
   '/admin/customers': typeof AdminCustomersRoute
   '/admin/financials': typeof AdminFinancialsRoute
@@ -221,6 +244,7 @@ export interface FileRoutesByTo {
   '/admin/zones': typeof AdminZonesRoute
   '/admin': typeof AdminIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/bot/v1/$': typeof ApiBotV1SplatRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -229,6 +253,7 @@ export interface FileRoutesById {
   '/admin': typeof AdminRouteWithChildren
   '/board': typeof BoardRoute
   '/checkout': typeof CheckoutRoute
+  '/enroll-2fa': typeof Enroll2faRoute
   '/help': typeof HelpRoute
   '/install': typeof InstallRoute
   '/login': typeof LoginRoute
@@ -236,6 +261,7 @@ export interface FileRoutesById {
   '/recover': typeof RecoverRoute
   '/verify-2fa': typeof Verify2faRoute
   '/admin/background': typeof AdminBackgroundRoute
+  '/admin/bots': typeof AdminBotsRoute
   '/admin/center': typeof AdminCenterRoute
   '/admin/customers': typeof AdminCustomersRoute
   '/admin/financials': typeof AdminFinancialsRoute
@@ -250,6 +276,7 @@ export interface FileRoutesById {
   '/admin/zones': typeof AdminZonesRoute
   '/admin/': typeof AdminIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/bot/v1/$': typeof ApiBotV1SplatRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -259,6 +286,7 @@ export interface FileRouteTypes {
     | '/admin'
     | '/board'
     | '/checkout'
+    | '/enroll-2fa'
     | '/help'
     | '/install'
     | '/login'
@@ -266,6 +294,7 @@ export interface FileRouteTypes {
     | '/recover'
     | '/verify-2fa'
     | '/admin/background'
+    | '/admin/bots'
     | '/admin/center'
     | '/admin/customers'
     | '/admin/financials'
@@ -280,12 +309,14 @@ export interface FileRouteTypes {
     | '/admin/zones'
     | '/admin/'
     | '/api/auth/$'
+    | '/api/bot/v1/$'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/account'
     | '/board'
     | '/checkout'
+    | '/enroll-2fa'
     | '/help'
     | '/install'
     | '/login'
@@ -293,6 +324,7 @@ export interface FileRouteTypes {
     | '/recover'
     | '/verify-2fa'
     | '/admin/background'
+    | '/admin/bots'
     | '/admin/center'
     | '/admin/customers'
     | '/admin/financials'
@@ -307,6 +339,7 @@ export interface FileRouteTypes {
     | '/admin/zones'
     | '/admin'
     | '/api/auth/$'
+    | '/api/bot/v1/$'
   id:
     | '__root__'
     | '/'
@@ -314,6 +347,7 @@ export interface FileRouteTypes {
     | '/admin'
     | '/board'
     | '/checkout'
+    | '/enroll-2fa'
     | '/help'
     | '/install'
     | '/login'
@@ -321,6 +355,7 @@ export interface FileRouteTypes {
     | '/recover'
     | '/verify-2fa'
     | '/admin/background'
+    | '/admin/bots'
     | '/admin/center'
     | '/admin/customers'
     | '/admin/financials'
@@ -335,6 +370,7 @@ export interface FileRouteTypes {
     | '/admin/zones'
     | '/admin/'
     | '/api/auth/$'
+    | '/api/bot/v1/$'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -343,6 +379,7 @@ export interface RootRouteChildren {
   AdminRoute: typeof AdminRouteWithChildren
   BoardRoute: typeof BoardRoute
   CheckoutRoute: typeof CheckoutRoute
+  Enroll2faRoute: typeof Enroll2faRoute
   HelpRoute: typeof HelpRoute
   InstallRoute: typeof InstallRoute
   LoginRoute: typeof LoginRoute
@@ -350,6 +387,7 @@ export interface RootRouteChildren {
   RecoverRoute: typeof RecoverRoute
   Verify2faRoute: typeof Verify2faRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
+  ApiBotV1SplatRoute: typeof ApiBotV1SplatRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -387,6 +425,13 @@ declare module '@tanstack/react-router' {
       path: '/checkout'
       fullPath: '/checkout'
       preLoaderRoute: typeof CheckoutRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/enroll-2fa': {
+      id: '/enroll-2fa'
+      path: '/enroll-2fa'
+      fullPath: '/enroll-2fa'
+      preLoaderRoute: typeof Enroll2faRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/help': {
@@ -443,6 +488,13 @@ declare module '@tanstack/react-router' {
       path: '/background'
       fullPath: '/admin/background'
       preLoaderRoute: typeof AdminBackgroundRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/bots': {
+      id: '/admin/bots'
+      path: '/bots'
+      fullPath: '/admin/bots'
+      preLoaderRoute: typeof AdminBotsRouteImport
       parentRoute: typeof AdminRoute
     }
     '/admin/center': {
@@ -536,11 +588,19 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAuthSplatRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/bot/v1/$': {
+      id: '/api/bot/v1/$'
+      path: '/api/bot/v1/$'
+      fullPath: '/api/bot/v1/$'
+      preLoaderRoute: typeof ApiBotV1SplatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 interface AdminRouteChildren {
   AdminBackgroundRoute: typeof AdminBackgroundRoute
+  AdminBotsRoute: typeof AdminBotsRoute
   AdminCenterRoute: typeof AdminCenterRoute
   AdminCustomersRoute: typeof AdminCustomersRoute
   AdminFinancialsRoute: typeof AdminFinancialsRoute
@@ -558,6 +618,7 @@ interface AdminRouteChildren {
 
 const AdminRouteChildren: AdminRouteChildren = {
   AdminBackgroundRoute: AdminBackgroundRoute,
+  AdminBotsRoute: AdminBotsRoute,
   AdminCenterRoute: AdminCenterRoute,
   AdminCustomersRoute: AdminCustomersRoute,
   AdminFinancialsRoute: AdminFinancialsRoute,
@@ -581,6 +642,7 @@ const rootRouteChildren: RootRouteChildren = {
   AdminRoute: AdminRouteWithChildren,
   BoardRoute: BoardRoute,
   CheckoutRoute: CheckoutRoute,
+  Enroll2faRoute: Enroll2faRoute,
   HelpRoute: HelpRoute,
   InstallRoute: InstallRoute,
   LoginRoute: LoginRoute,
@@ -588,6 +650,7 @@ const rootRouteChildren: RootRouteChildren = {
   RecoverRoute: RecoverRoute,
   Verify2faRoute: Verify2faRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
+  ApiBotV1SplatRoute: ApiBotV1SplatRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

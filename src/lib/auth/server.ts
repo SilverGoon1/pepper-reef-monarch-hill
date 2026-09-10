@@ -46,6 +46,9 @@ import {
   PREVIEW_CLIENT_ID,
   PREVIEW_CLIENT_SECRET,
 } from "./preview";
+import { isVercelProduction, PRODUCTION_AUTH_ORIGINS, requireNeonInProduction } from "../prod-guard.server";
+
+requireNeonInProduction();
 
 // Kick (and share) PGLite bootstrap as soon as the auth server module loads.
 void ensureDbReady();
@@ -161,6 +164,7 @@ const baseURL = explicitBaseURL ?? {
 // request's own origin (and forwarded host) so same-origin Admin sign-in
 // works. Do not wildcard `*.grok.me` (sibling CSRF).
 const trustedOrigins = async (request?: Request): Promise<string[]> => {
+  if (isVercelProduction()) return [...PRODUCTION_AUTH_ORIGINS];
   const origins = new Set(staticTrustedOrigins);
   if (!request) return [...origins];
   const fallbackProto = request.url.startsWith("http://") ? "http" : "https";

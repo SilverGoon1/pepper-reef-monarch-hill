@@ -82,6 +82,9 @@ var _0022_rewards_invite_default = "alter table profiles add column if not exist
 //#region migrations/0023_profile_address.sql?raw
 var _0023_profile_address_default = "alter table profiles add column if not exists address_line text not null default '';\nalter table profiles add column if not exists city text not null default '';\nalter table profiles add column if not exists zip text not null default '';\n";
 //#endregion
+//#region migrations/0024_bot_agents.sql?raw
+var _0024_bot_agents_default = "create table if not exists bot_agents (\n  id text primary key,\n  name text not null unique,\n  role text not null,\n  token_hash text not null unique,\n  scopes text[] not null default '{}',\n  enabled boolean not null default true,\n  created_at timestamptz not null default now(),\n  last_used_at timestamptz,\n  expires_at timestamptz,\n  created_by text\n);\n\ncreate index if not exists bot_agents_enabled_idx on bot_agents (enabled);\n\ncreate table if not exists bot_audit (\n  id text primary key,\n  agent_id text,\n  path text not null,\n  status integer not null,\n  ip text not null default '',\n  created_at timestamptz not null default now()\n);\n\ncreate index if not exists bot_audit_agent_idx on bot_audit (agent_id, created_at desc);\ncreate index if not exists bot_audit_created_idx on bot_audit (created_at desc);\n";
+//#endregion
 //#region scripts/migration-plan.mjs
 /**
 * Migration bookkeeping shared by the two appliers — `scripts/migrate.mjs`
@@ -225,7 +228,8 @@ async function createPgliteSql() {
 			"/migrations/0020_card_editor.sql": _0020_card_editor_default,
 			"/migrations/0021_hide_image.sql": _0021_hide_image_default,
 			"/migrations/0022_rewards_invite.sql": _0022_rewards_invite_default,
-			"/migrations/0023_profile_address.sql": _0023_profile_address_default
+			"/migrations/0023_profile_address.sql": _0023_profile_address_default,
+			"/migrations/0024_bot_agents.sql": _0024_bot_agents_default
 		});
 		const done = (await pg.query("select name from _migrations")).rows.map((r) => r.name);
 		for (const { name, path } of pendingMigrations(Object.keys(migrations), done)) await pg.transaction(async (tx) => {
@@ -243,6 +247,7 @@ async function createPgliteSql() {
 var sqlPromise = null;
 async function createSql() {
 	if (typeof window !== "undefined") throw new Error("@/lib/db is server-only — call getSql() from a createServerFn handler or a server route loader, never from client code.");
+	if ((process.env.VERCEL_ENV ?? "").trim() === "production" && !databaseUrl$1) throw new Error("Production requires DATABASE_URL (Neon). Auth and orders are refused.");
 	return dbSource === "neon" ? createNeonSql() : createPgliteSql();
 }
 /**
@@ -286,11 +291,14 @@ function ensureDbReady() {
 	return getSql().then(() => void 0);
 }
 var globalBoot = globalThis;
-if (typeof window === "undefined" && dbSource === "pglite") globalBoot.__pgBootstrapPromise__ ??= ensureDbReady().catch((err) => {
-	globalBoot.__pgBootstrapPromise__ = void 0;
-	console.error("[db] PGLite bootstrap failed:", err);
-	throw err;
-});
+if (typeof window === "undefined" && dbSource === "pglite") {
+	if ((process.env.VERCEL_ENV ?? "").trim() === "production") console.error("[db] Production requires DATABASE_URL (Neon). Auth and orders are refused.");
+	else globalBoot.__pgBootstrapPromise__ ??= ensureDbReady().catch((err) => {
+		globalBoot.__pgBootstrapPromise__ = void 0;
+		console.error("[db] PGLite bootstrap failed:", err);
+		throw err;
+	});
+}
 //#endregion
 //#region src/lib/auth/gate-identity.server.ts
 var GATE_IDENTITY_HEADER = "x-grok-identity";
@@ -748,6 +756,20 @@ var PGliteConnection = class {
 */
 var PREVIEW_ALLOWED_HOSTS = ["*.grok-sandbox.com"];
 //#endregion
+//#region src/lib/prod-guard.server.ts
+/**
+* Production runtime checks. Preview and local `vite preview` are not
+* `VERCEL_ENV=production`, so they keep the PGLite fallback.
+*/
+function isVercelProduction() {
+	return (process.env.VERCEL_ENV ?? "").trim() === "production";
+}
+function requireNeonInProduction() {
+	const url = (process.env.DATABASE_URL ?? "").trim();
+	if (isVercelProduction() && !url) throw new Error("Production requires DATABASE_URL (Neon). Auth and orders are refused.");
+}
+var PRODUCTION_AUTH_ORIGINS = ["https://southendpizza.app", "https://www.southendpizza.app"];
+//#endregion
 //#region src/lib/auth/server.ts
 /**
 * Self-hosted Better Auth for THIS app (server-only).
@@ -780,6 +802,7 @@ var PREVIEW_ALLOWED_HOSTS = ["*.grok-sandbox.com"];
 * components read the user via `@/lib/auth/use-current-user`; server functions get
 * a verified id via `@/lib/auth/middleware`.
 */
+requireNeonInProduction();
 ensureDbReady();
 /**
 * Preview secret must outlive module reloads: PGLite (and its session rows) is
@@ -853,6 +876,7 @@ var baseURL = explicitBaseURL ?? {
 	fallback: "http://localhost:8080"
 };
 var trustedOrigins = async (request) => {
+	if (isVercelProduction()) return [...PRODUCTION_AUTH_ORIGINS];
 	const origins = new Set(staticTrustedOrigins);
 	if (!request) return [...origins];
 	const fallbackProto = request.url.startsWith("http://") ? "http" : "https";
@@ -1821,4 +1845,4 @@ var vercel_web_default = { async fetch(req, context) {
 	return nitroApp.fetch(req);
 } };
 //#endregion
-export { dbSource as a, vercel_web_default as default, gateIdentityEnabled as i, authConfigured as n, getSql as o, GROK_PROVIDERS as r, auth as t };
+export { requireNeonInProduction as a, dbSource as c, vercel_web_default as default, isVercelProduction as i, getSql as l, authConfigured as n, GROK_PROVIDERS as o, PRODUCTION_AUTH_ORIGINS as r, gateIdentityEnabled as s, auth as t };

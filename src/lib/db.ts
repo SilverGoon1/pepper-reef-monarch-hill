@@ -176,6 +176,9 @@ async function createSql(): Promise<Sql> {
         "or a server route loader, never from client code.",
     );
   }
+  if ((process.env.VERCEL_ENV ?? "").trim() === "production" && !databaseUrl) {
+    throw new Error("Production requires DATABASE_URL (Neon). Auth and orders are refused.");
+  }
   return dbSource === "neon" ? createNeonSql() : createPgliteSql();
 }
 
@@ -230,9 +233,13 @@ const globalBoot = globalThis as typeof globalThis & {
   __pgBootstrapPromise__?: Promise<void>;
 };
 if (typeof window === "undefined" && dbSource === "pglite") {
-  globalBoot.__pgBootstrapPromise__ ??= ensureDbReady().catch((err) => {
-    globalBoot.__pgBootstrapPromise__ = undefined;
-    console.error("[db] PGLite bootstrap failed:", err);
-    throw err;
-  });
+  if ((process.env.VERCEL_ENV ?? "").trim() === "production") {
+    console.error("[db] Production requires DATABASE_URL (Neon). Auth and orders are refused.");
+  } else {
+    globalBoot.__pgBootstrapPromise__ ??= ensureDbReady().catch((err) => {
+      globalBoot.__pgBootstrapPromise__ = undefined;
+      console.error("[db] PGLite bootstrap failed:", err);
+      throw err;
+    });
+  }
 }

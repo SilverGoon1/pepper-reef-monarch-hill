@@ -344,7 +344,12 @@ export type TwoFactorStatus = {
   required: boolean;
   unlocked: boolean;
   enabled: boolean;
+  enroll: boolean;
+  locked: boolean;
 };
+
+/** Live card capture stays off until a real processor is wired. */
+export const CARD_PROCESSOR_LIVE = false;
 
 export type AdminInsights = {
   customers: {

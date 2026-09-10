@@ -113,12 +113,23 @@ export function SessionGate({
       </div>
     );
   }
+  if (twoFactor.enroll) {
+    return (
+      <div className="page-card">
+        <h1>Set up two-factor</h1>
+        <p>Shop admin needs an authenticator app before the desk can open.</p>
+        <Link to="/enroll-2fa" search={{ next: pathname }} className="btn-print">
+          Enroll authenticator
+        </Link>
+      </div>
+    );
+  }
   if (twoFactor.required) {
     return (
       <div className="page-card">
         <h1>Two-factor check</h1>
         <p>Enter the code from your authenticator app to continue.</p>
-        <Link to="/verify-2fa" className="btn-print">
+        <Link to="/verify-2fa" search={{ next: pathname }} className="btn-print">
           Verify
         </Link>
       </div>

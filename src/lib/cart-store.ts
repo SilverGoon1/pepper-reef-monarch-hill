@@ -111,6 +111,22 @@ if (typeof window !== "undefined") {
   void useCartStore.persist.rehydrate();
 }
 
+export function wipeCart() {
+  useCartStore.getState().clear();
+  try {
+    useCartStore.persist.clearStorage();
+  } catch {
+    /* ignore */
+  }
+  if (typeof window !== "undefined") {
+    try {
+      window.localStorage.removeItem("south-end-cart-v1");
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
 export function cartTotals(lines: CartLine[]) {
   const count = lines.reduce((n, l) => n + l.qty, 0);
   const subtotal = Math.round(lines.reduce((n, l) => n + l.unitPrice * l.qty, 0) * 100) / 100;

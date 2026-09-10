@@ -35,10 +35,8 @@ import {
   sanitizeToppings,
 } from "@/lib/pizza";
 import {
-	STAFF_ADMIN_EMAIL,
-	STAFF_ADMIN_ID,
 	STAFF_ADMIN_NAME,
-	STAFF_ADMIN_PASSWORD,
+	isStaffAdminAccount,
 } from "@/lib/staff-admin";
 
 function num(v: unknown) {
@@ -864,43 +862,11 @@ async function backfillRewardsLedger(sql: Sql) {
 }
 
 async function ensureStaffAdmin(sql: Sql) {
-	const found = (await sql.query(`select id from "user" where id = $1 or lower(email) = $2 limit 1`, [
-		STAFF_ADMIN_ID,
-		STAFF_ADMIN_EMAIL,
-	]))[0];
-	const userId = found?.id ? String(found.id) : STAFF_ADMIN_ID;
-	if (!found) {
-		await sql.query(
-			`insert into "user" (id, name, email, "emailVerified", "createdAt", "updatedAt") values ($1,$2,$3,true,now(),now())`,
-			[userId, STAFF_ADMIN_NAME, STAFF_ADMIN_EMAIL],
-		);
-	} else {
-		await sql.query(`update "user" set name = $1, email = $2, "emailVerified" = true, "updatedAt" = now() where id = $3`, [
-			STAFF_ADMIN_NAME,
-			STAFF_ADMIN_EMAIL,
-			userId,
-		]);
-	}
+	const { applyStaffCredential, applyStaffTotpFromEnv } = await import("@/lib/staff-credential.server");
+	const userId = await applyStaffCredential(sql);
 	await ensureProfile(sql, userId, STAFF_ADMIN_NAME);
 	await sql`update profiles set role = 'admin', display_name = ${STAFF_ADMIN_NAME} where user_id = ${userId}`;
-	const cred = (await sql.query(
-		`select id, password from account where "userId" = $1 and "providerId" = 'credential' limit 1`,
-		[userId],
-	))[0];
-	if (cred?.id && String(cred.password ?? "").includes(":")) return;
-	const hash = await hashPassword(STAFF_ADMIN_PASSWORD);
-	if (cred?.id) {
-		await sql.query(`update account set password = $1, "updatedAt" = now() where id = $2 and "providerId" = 'credential'`, [
-			hash,
-			String(cred.id),
-		]);
-		return;
-	}
-	await sql.query(
-		`insert into account (id, "accountId", "providerId", "userId", password, "createdAt", "updatedAt")
-     values ($1,$2,'credential',$3,$4,now(),now())`,
-		[`account-${userId}`, userId, userId, hash],
-	);
+	await applyStaffTotpFromEnv(sql, userId);
 }
 
 async function ensureProfile(sql: Sql, userId: string, displayName?: string) {
@@ -1239,17 +1205,24 @@ export const claimAdmin = createServerFn({ method: "POST" }).middleware([authMid
 export const getTwoFactorStatus = createServerFn({ method: "GET" }).middleware([authMiddleware]).handler(async ({ context }) => {
 	const sql = await getSql();
 	await ensureProfile(sql, context.userId);
-	if (!bool((await sql`select totp_enabled from profiles where user_id = ${context.userId}`)[0]?.totp_enabled)) return {
-		required: false,
-		unlocked: true,
-		enabled: false
-	};
+	const profile = (await sql`select totp_enabled, role from profiles where user_id = ${context.userId}`)[0];
+	const email = String((await sql.query(`select email from "user" where id = $1 limit 1`, [context.userId]))[0]?.email ?? "");
+	const locked = profile?.role === "admin" || isStaffAdminAccount(context.userId, email);
+	const enabled = bool(profile?.totp_enabled);
+	if (locked && !enabled) {
+		return { required: true, unlocked: false, enabled: false, enroll: true, locked: true };
+	}
+	if (!enabled) {
+		return { required: false, unlocked: true, enabled: false, enroll: false, locked: false };
+	}
 	const exp = (await sql`select expires_at from two_factor_unlocks where user_id = ${context.userId}`)[0]?.expires_at;
 	const unlocked = Boolean(exp && new Date(String(exp)).getTime() > Date.now());
 	return {
 		required: !unlocked,
 		unlocked,
-		enabled: true
+		enabled: true,
+		enroll: false,
+		locked,
 	};
 });
 export const startTotpSetup = createServerFn({ method: "POST" }).middleware([authMiddleware]).handler(async ({ context }) => {
@@ -1283,6 +1256,11 @@ export const verifyTotpChallenge = createServerFn({ method: "POST" }).middleware
 });
 export const disableTotp = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator((data: any) => data).handler(async ({ context, data }) => {
 	const sql = await getSql();
+	const email = String((await sql.query(`select email from "user" where id = $1 limit 1`, [context.userId]))[0]?.email ?? "");
+	const role = String((await sql`select role from profiles where user_id = ${context.userId}`)[0]?.role ?? "");
+	if (role === "admin" || isStaffAdminAccount(context.userId, email)) {
+		throw new Error("Shop admin two-factor stays on.");
+	}
 	const rows = await sql`select totp_secret from profiles where user_id = ${context.userId}`;
 	if (!rows[0]?.totp_secret || !verifyTotp(String(rows[0].totp_secret), String(data.code || ""))) throw new Error("That code did not match.");
 	await sql`update profiles set totp_enabled = false, totp_secret = null where user_id = ${context.userId}`;
@@ -1290,7 +1268,11 @@ export const disableTotp = createServerFn({ method: "POST" }).middleware([authMi
 	return { ok: true };
 });
 async function assertTwoFactor(sql: Sql, userId: string) {
-	if (!bool((await sql`select totp_enabled from profiles where user_id = ${userId}`)[0]?.totp_enabled)) return;
+	const profile = (await sql`select totp_enabled, role from profiles where user_id = ${userId}`)[0];
+	const email = String((await sql.query(`select email from "user" where id = $1 limit 1`, [userId]))[0]?.email ?? "");
+	const must = bool(profile?.totp_enabled) || profile?.role === "admin" || isStaffAdminAccount(userId, email);
+	if (!must) return;
+	if (!bool(profile?.totp_enabled)) throw new Error("Two-factor enrollment required.");
 	const exp = (await sql`select expires_at from two_factor_unlocks where user_id = ${userId}`)[0]?.expires_at;
 	if (!exp || new Date(String(exp)).getTime() <= Date.now()) throw new Error("Two-factor verification required.");
 }
@@ -1352,8 +1334,9 @@ async function writePlacedOrder(sql: Sql, userId: string, data: any) {
 	const settings = await loadSettingsRow(sql);
 	if (bool(settings.vacation_on)) throw new Error(String(settings.vacation_message || "The shop is closed for vacation."));
 	if (!data.lines?.length) throw new Error("Your cart is empty.");
-	if (data.fulfillment === "pickup" && data.paymentMethod === "pay_delivery") throw new Error("Choose pay at pickup or card.");
-	if (data.fulfillment === "delivery" && data.paymentMethod === "pay_pickup") throw new Error("Choose cash or card.");
+	if (data.fulfillment === "pickup" && data.paymentMethod === "pay_delivery") throw new Error("Choose pay at pickup.");
+	if (data.fulfillment === "delivery" && data.paymentMethod === "pay_pickup") throw new Error("Choose cash.");
+	if (String(data.paymentMethod) === "pay_card") throw new Error("Card payments are not live yet. Pay at pickup or with cash.");
 	const pickupName = String(data.pickupName ?? "").trim().slice(0, 80);
 	if (data.fulfillment === "pickup" && !pickupName) throw new Error("Enter the name for pickup.");
 	const menuItems = await sql`select id, category_id, name, prices, condiments from menu_items`;
@@ -1531,9 +1514,6 @@ export const placeGuestOrder = createServerFn({ method: "POST" }).validator((dat
 	const phone = toTenDigitPhone(String(data.guestPhone ?? ""));
 	if (!name) throw new Error("Enter your name.");
 	if (!phone) throw new Error("Enter a 10-digit US phone number.");
-	if (bool((await loadSettingsRow(sql)).guest_card_required) && String(data.paymentMethod) !== "pay_card") {
-		throw new Error("Guests pay by card. Choose card to place this order.");
-	}
 	const userId = await ensureGuestCustomer(sql, name, phone);
 	const pickupName = String(data.pickupName ?? "").trim().slice(0, 80) || name;
 	return writePlacedOrder(sql, userId, { ...data, redeemPoints: 0, pickupName });
