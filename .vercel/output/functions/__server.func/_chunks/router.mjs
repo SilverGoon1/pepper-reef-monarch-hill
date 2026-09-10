@@ -3574,6 +3574,7 @@ async function seedDemoSalesIfEmpty(sql) {
 	}
 }
 var shopBoot = globalThis;
+var profileLocks = /* @__PURE__ */ new Map();
 async function ensureSettingsSchema(sql) {
 	if (!shopBoot.__southendSchema__) shopBoot.__southendSchema__ = applySettingsSchema(sql).catch((err) => {
 		shopBoot.__southendSchema__ = void 0;
@@ -3959,19 +3960,35 @@ async function ensureStaffAdmin(sql) {
 	]);
 }
 async function ensureProfile(sql, userId, displayName) {
+	const inflight = profileLocks.get(userId);
+	if (inflight) {
+		await inflight;
+		return;
+	}
+	const run = ensureProfileRow(sql, userId, displayName).finally(() => {
+		profileLocks.delete(userId);
+	});
+	profileLocks.set(userId, run);
+	await run;
+}
+async function ensureProfileRow(sql, userId, displayName) {
 	if ((await sql`select user_id from profiles where user_id = ${userId}`).length) return;
 	const settings = await loadSettingsRow(sql);
 	const bonus = Math.round(num(settings.welcome_bonus));
 	for (let i = 0; i < 6; i++) try {
-		await sql.query(`insert into profiles (user_id, display_name, points, referral_code) values ($1,$2,$3,$4)`, [
+		if (!(await sql.query(`insert into profiles (user_id, display_name, points, referral_code) values ($1,$2,$3,$4)
+         on conflict (user_id) do nothing
+         returning user_id`, [
 			userId,
 			displayName ?? "",
 			bonus,
 			makeReferralCode()
-		]);
+		])).length) return;
 		if (bonus) await addLedger(sql, userId, "welcome", bonus, "Welcome bonus");
 		return;
 	} catch (err) {
+		const msg = err instanceof Error ? err.message : String(err ?? "");
+		if (/profiles_pkey/i.test(msg)) return;
 		if (i === 5) throw err;
 	}
 }
@@ -4775,12 +4792,18 @@ var acceptOrder = createServerFn({ method: "POST" }).middleware([authMiddleware]
 	const sql = await getSql();
 	await ensureProfile(sql, context.userId);
 	await requireAdmin(sql, context.userId);
-	const rows = await sql`select * from orders where id = ${data.id}`;
+	const id = String(data?.id ?? "").trim();
+	if (!id) throw new Error("Ticket is missing.");
+	const taken = await sql.query(`update orders
+     set status = 'accepted', accepted_at = coalesce(accepted_at, now())
+     where id = $1 and status in ('placed', 'awaiting_payment')
+     returning *`, [id]);
+	if (taken[0]) return toOrder(taken[0]);
+	const rows = await sql`select * from orders where id = ${id}`;
 	if (!rows[0]) throw new Error("Order not found.");
 	const current = String(rows[0].status);
-	if (current === "canceled" || current === "completed") throw new Error("That ticket cannot be accepted.");
-	await sql.query(`update orders set status = 'accepted', accepted_at = coalesce(accepted_at, now()) where id = $1`, [data.id]);
-	return toOrder((await sql`select * from orders where id = ${data.id}`)[0]);
+	if (current === "accepted" || current === "preparing" || current === "ready" || current === "out_for_delivery") return toOrder(rows[0]);
+	throw new Error("That ticket cannot be accepted.");
 });
 var getAdminInsights = createServerFn({ method: "GET" }).middleware([authMiddleware]).handler(async ({ context }) => {
 	const sql = await getSql();
@@ -5254,8 +5277,8 @@ var listIncomingOrders = createServerFn({ method: "GET" }).middleware([authMiddl
       select o.*, p.display_name, p.phone
       from orders o
       left join profiles p on p.user_id = o.user_id
-      where o.status in ('placed', 'awaiting_payment')
-      order by o.created_at asc
+      where o.status = 'placed'
+      order by o.created_at asc, coalesce(o.ticket_no, 0) asc, o.id asc
       limit 40`).map((row) => {
 		return {
 			...toOrder(row),
@@ -6170,7 +6193,7 @@ function SupportDock() {
 }
 //#endregion
 //#region src/styles.css?url
-var styles_default = "/assets/styles-BpL_tt98.css";
+var styles_default = "/assets/styles-BTn6B9pH.css";
 //#endregion
 //#region src/routes/__root.tsx
 var APP_NAME = "South End Pizza III";
@@ -8617,6 +8640,25 @@ function InviteQr({ value, label }) {
 }
 //#endregion
 //#region src/components/guards.tsx
+function accountLoadMessage(err) {
+	const raw = err instanceof Error ? err.message : "";
+	const lower = raw.toLowerCase();
+	if (lower.includes("profiles_pkey") || lower.includes("duplicate key") || lower.includes("unique constraint")) return "The shop is still opening your staff account. Tap Try again.";
+	if (isTransientFetchError(err)) return "The shop did not answer. Tap Try again.";
+	return raw.trim() || "Could not load your staff account.";
+}
+async function loadStaffAccount() {
+	let last;
+	for (let i = 0; i < 3; i += 1) try {
+		return await Promise.all([getMe(), getTwoFactorStatus()]);
+	} catch (err) {
+		last = err;
+		const msg = err instanceof Error ? err.message : "";
+		if (!(isTransientFetchError(err) || /profiles_pkey|duplicate key|unique constraint/i.test(msg)) || i === 2) throw err;
+		await new Promise((resolve) => setTimeout(resolve, 280 * (i + 1)));
+	}
+	throw last;
+}
 function SessionGate({ children, needAdmin }) {
 	const { user, isPending } = useCurrentUserState();
 	const pathname = useRouterState({ select: (s) => s.location.pathname });
@@ -8630,9 +8672,9 @@ function SessionGate({ children, needAdmin }) {
 		let live = true;
 		const timeout = window.setTimeout(() => {
 			if (!live) return;
-			setError("Account is taking too long. Try again.");
-		}, 12e3);
-		Promise.all([getMe(), getTwoFactorStatus()]).then(([p, t]) => {
+			setError("Account is taking too long. Tap Try again.");
+		}, 14e3);
+		loadStaffAccount().then(([p, t]) => {
 			if (!live) return;
 			window.clearTimeout(timeout);
 			setProfile(p);
@@ -8640,7 +8682,7 @@ function SessionGate({ children, needAdmin }) {
 		}).catch((e) => {
 			if (!live) return;
 			window.clearTimeout(timeout);
-			setError(e instanceof Error ? e.message : "Could not load account");
+			setError(accountLoadMessage(e));
 		});
 		return () => {
 			live = false;
@@ -8665,8 +8707,12 @@ function SessionGate({ children, needAdmin }) {
 	if (error) return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 		className: "page-card",
 		children: [
-			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h1", { children: "Could not load account" }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h1", { children: "Could not load your account" }),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { children: error }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+				className: "ed-sub",
+				children: "Nothing was lost. Tap Try again to open the shop desk."
+			}),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
 				type: "button",
 				className: "btn-print",
@@ -9638,6 +9684,7 @@ function AdminDrawer() {
 //#region src/components/incoming-order-queue.tsx
 var DEFAULT_ALARM = "/order-alarm.wav";
 var SNOOZE_KEY = "southend-order-snooze";
+var POS_ACCEPTED_EVENT = "southend-pos-accepted";
 function loadSnooze() {
 	try {
 		const raw = sessionStorage.getItem(SNOOZE_KEY);
@@ -9652,17 +9699,35 @@ function saveSnooze(ids) {
 		sessionStorage.setItem(SNOOZE_KEY, JSON.stringify([...ids]));
 	} catch {}
 }
+function fifoIncoming(list) {
+	return [...list].sort((a, b) => {
+		const ta = Date.parse(a.createdAt) || 0;
+		const tb = Date.parse(b.createdAt) || 0;
+		if (ta !== tb) return ta - tb;
+		return (a.ticketNo || 0) - (b.ticketNo || 0) || a.id.localeCompare(b.id);
+	});
+}
+function emitPosAccepted(order) {
+	if (typeof window === "undefined") return;
+	window.dispatchEvent(new CustomEvent(POS_ACCEPTED_EVENT, { detail: order }));
+}
 function IncomingOrderQueue() {
 	const [queue, setQueue] = (0, import_react.useState)([]);
+	const [currentId, setCurrentId] = (0, import_react.useState)("");
 	const [busy, setBusy] = (0, import_react.useState)(false);
 	const [error, setError] = (0, import_react.useState)("");
 	const [muted, setMuted] = (0, import_react.useState)(false);
 	const [src, setSrc] = (0, import_react.useState)(DEFAULT_ALARM);
+	const [toast, setToast] = (0, import_react.useState)("");
 	const seen = (0, import_react.useRef)(/* @__PURE__ */ new Set());
 	const snoozed = (0, import_react.useRef)(loadSnooze());
+	const taken = (0, import_react.useRef)(/* @__PURE__ */ new Set());
 	const primed = (0, import_react.useRef)(false);
 	const audioRef = (0, import_react.useRef)(null);
-	const mutedRef = (0, import_react.useRef)(false);
+	const mutedRef = (0, import_react.useRef)(muted);
+	(0, import_react.useEffect)(() => {
+		mutedRef.current = muted;
+	}, [muted]);
 	(0, import_react.useEffect)(() => {
 		getAdminShop().then((d) => setSrc(d.notifyAudio || DEFAULT_ALARM)).catch(() => void 0);
 	}, []);
@@ -9675,6 +9740,11 @@ function IncomingOrderQueue() {
 			audioRef.current = null;
 		};
 	}, [src]);
+	(0, import_react.useEffect)(() => {
+		if (!toast) return;
+		const t = window.setTimeout(() => setToast(""), 3200);
+		return () => window.clearTimeout(t);
+	}, [toast]);
 	function ring() {
 		if (mutedRef.current) return;
 		const el = audioRef.current;
@@ -9682,19 +9752,24 @@ function IncomingOrderQueue() {
 		el.currentTime = 0;
 		el.play().catch(() => void 0);
 	}
+	function applyIncoming(list) {
+		const live = fifoIncoming(list.filter((t) => !snoozed.current.has(t.id) && !taken.current.has(t.id)));
+		setQueue(live);
+		setCurrentId((cur) => {
+			if (cur && live.some((t) => t.id === cur)) return cur;
+			return live[0]?.id ?? "";
+		});
+		const fresh = live.filter((t) => !seen.current.has(t.id));
+		for (const t of live) seen.current.add(t.id);
+		if (fresh.length) ring();
+		else if (!primed.current && live.length) ring();
+		primed.current = true;
+	}
 	(0, import_react.useEffect)(() => {
 		return onVisibleInterval(4e3, () => {
-			listIncomingOrders().then((list) => {
-				const live = list.filter((t) => !snoozed.current.has(t.id));
-				setQueue(live);
-				const fresh = live.filter((t) => !seen.current.has(t.id));
-				for (const t of live) seen.current.add(t.id);
-				if (fresh.length) ring();
-				else if (!primed.current && live.length) ring();
-				primed.current = true;
-			}).catch(() => void 0);
+			listIncomingOrders().then(applyIncoming).catch(() => void 0);
 		});
-	}, [muted, src]);
+	}, [src]);
 	(0, import_react.useEffect)(() => {
 		if (!queue.length || muted) return;
 		const t = window.setInterval(() => ring(), 1e4);
@@ -9704,17 +9779,48 @@ function IncomingOrderQueue() {
 		muted,
 		src
 	]);
-	const current = queue[0];
-	if (!current) return null;
+	const current = queue.find((t) => t.id === currentId) ?? queue[0];
+	const place = current ? queue.findIndex((t) => t.id === current.id) + 1 : 0;
 	function take() {
+		if (!current || busy || taken.current.has(current.id)) return;
+		const ticket = current;
+		taken.current.add(ticket.id);
 		setBusy(true);
 		setError("");
-		acceptOrder({ data: { id: current.id } }).then(() => {
-			setQueue((list) => list.filter((t) => t.id !== current.id));
-		}).catch((e) => setError(e instanceof Error ? e.message : "Could not accept")).finally(() => setBusy(false));
+		const remaining = queue.filter((t) => t.id !== ticket.id);
+		setQueue(remaining);
+		setCurrentId(remaining[0]?.id ?? "");
+		acceptOrder({ data: { id: ticket.id } }).then((order) => {
+			const accepted = {
+				...ticket,
+				...order,
+				status: "accepted",
+				customerName: ticket.customerName,
+				customerPhone: ticket.customerPhone,
+				chatUnread: ticket.chatUnread,
+				chatThreadId: ticket.chatThreadId
+			};
+			emitPosAccepted(accepted);
+			setToast(`Ticket #${formatTicketNo(accepted.ticketNo)} accepted — sent to the kitchen.`);
+		}).catch((e) => {
+			taken.current.delete(ticket.id);
+			setError(e instanceof Error ? e.message : "Could not accept");
+			setQueue((list) => {
+				if (list.some((t) => t.id === ticket.id)) return list;
+				return fifoIncoming([ticket, ...list]);
+			});
+			setCurrentId(ticket.id);
+		}).finally(() => setBusy(false));
 	}
+	const toastEl = toast ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+		className: "save-toast pos-accept-toast",
+		"data-ok": "true",
+		role: "status",
+		children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: "Accepted" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: toast })]
+	}) : null;
+	if (!current) return toastEl;
 	const where = current.fulfillment === "delivery" ? `${current.addressLine}${current.city ? `, ${current.city}` : ""} ${current.zip}`.trim() : current.pickupName ? `Pickup for ${current.pickupName}` : "Pickup at the counter";
-	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [toastEl, /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
 		className: "order-alert-scrim",
 		role: "dialog",
 		"aria-modal": "true",
@@ -9730,7 +9836,7 @@ function IncomingOrderQueue() {
 							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Bell, {
 								size: 14,
 								strokeWidth: 2.4
-							}), " Incoming"]
+							}), " Incoming · oldest first"]
 						}),
 						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("h2", {
 							id: "order-alert-title",
@@ -9740,12 +9846,15 @@ function IncomingOrderQueue() {
 							className: "order-alert-q",
 							children: [
 								queue.length,
-								" waiting · showing 1 of ",
-								queue.length
+								" tickets waiting for the kitchen · showing ",
+								place,
+								" of ",
+								queue.length,
+								", oldest first"
 							]
 						}) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("em", {
 							className: "order-alert-q",
-							children: "Kitchen queue"
+							children: "Oldest ticket waiting for the kitchen"
 						}),
 						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
 							type: "button",
@@ -9812,39 +9921,44 @@ function IncomingOrderQueue() {
 					children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
 						type: "button",
 						className: "btn-print",
-						disabled: busy,
+						disabled: busy || taken.current.has(current.id),
 						onClick: take,
 						children: busy ? "Accepting…" : "Accept order"
 					}), queue.length > 1 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
 						type: "button",
 						className: "ed-btn",
 						disabled: busy,
-						onClick: () => setQueue((list) => [...list.slice(1), list[0]]),
-						children: "Next in queue"
+						onClick: () => {
+							const i = queue.findIndex((t) => t.id === current.id);
+							const next = queue[(i + 1 + queue.length) % queue.length];
+							if (next) setCurrentId(next.id);
+						},
+						children: "Show next oldest"
 					}) : null]
 				}),
 				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 					className: "ed-sub",
-					children: "Accepting sends the ticket to the kitchen. Remaining tickets stay in this queue."
+					children: "Accept sends this ticket to the kitchen and cannot be tapped twice. Other waiting tickets stay in this pop-up, oldest first."
 				}),
 				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
 					type: "button",
 					className: "order-alert-hide",
-					"aria-label": "Keep ticket waiting",
+					"aria-label": "Hide incoming pop-ups for now. Tickets stay on the Open board.",
 					onClick: () => {
 						for (const t of queue) snoozed.current.add(t.id);
 						saveSnooze(snoozed.current);
 						setQueue([]);
+						setCurrentId("");
 						audioRef.current?.pause();
 					},
 					children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(X, {
 						size: 14,
 						strokeWidth: 2.4
-					}), " Keep waiting on POS"]
+					}), " Hide pop-ups — tickets stay on Open"]
 				})
 			]
 		})
-	});
+	})] });
 }
 //#endregion
 //#region src/routes/admin.tsx
@@ -17395,6 +17509,12 @@ var Route$6 = createFileRoute("/admin/orders")({ component: () => /* @__PURE__ *
 //#region src/data/patches.ts
 var PATCHES = [
 	{
+		id: "2026-09-10-pos-accept-queue",
+		date: "September 10, 2026",
+		title: "POS accept queue is staff-safe",
+		added: ["Incoming tickets line up oldest first, Accept can only fire once, and the board shows a ticket number confirmation.", "Staff account load no longer dies on a duplicate profile row."]
+	},
+	{
 		id: "2026-09-10-admin-sign-out",
 		date: "September 10, 2026",
 		title: "Admin can sign out",
@@ -17771,6 +17891,21 @@ function posBucket(status) {
 	if (status === "placed" || status === "awaiting_payment" || status === "canceled") return "placed";
 	return "accepted";
 }
+function posStamp(status) {
+	if (status === "awaiting_payment") return {
+		tone: "unpaid",
+		label: "unpaid"
+	};
+	if (status === "canceled") return {
+		tone: "placed",
+		label: "canceled"
+	};
+	const bucket = posBucket(status);
+	return {
+		tone: bucket,
+		label: bucket
+	};
+}
 function priceNum(p) {
 	const n = Number(String(p).replace(/^\$/, ""));
 	return Number.isFinite(n) ? n : 0;
@@ -18041,13 +18176,37 @@ function AdminPos() {
 	const [chromeHost, setChromeHost] = (0, import_react.useState)(null);
 	const seenChat = (0, import_react.useRef)(/* @__PURE__ */ new Set());
 	const primedChat = (0, import_react.useRef)(false);
+	const heldAccepted = (0, import_react.useRef)(/* @__PURE__ */ new Set());
+	(0, import_react.useEffect)(() => {
+		const onAccepted = (event) => {
+			const order = event.detail;
+			if (!order?.id) return;
+			heldAccepted.current.add(order.id);
+			setTickets((list) => list.map((t) => t.id === order.id ? {
+				...t,
+				...order,
+				status: "accepted"
+			} : t));
+		};
+		window.addEventListener(POS_ACCEPTED_EVENT, onAccepted);
+		return () => window.removeEventListener(POS_ACCEPTED_EVENT, onAccepted);
+	}, []);
 	(0, import_react.useEffect)(() => {
 		setChromeHost(document.getElementById("admin-top-extra"));
 	}, []);
 	(0, import_react.useEffect)(() => {
 		return onVisibleInterval(6e3, () => {
 			listPosOrders().then((list) => {
-				setTickets(list);
+				const next = list.map((t) => {
+					if (!heldAccepted.current.has(t.id)) return t;
+					if (t.status === "placed" || t.status === "awaiting_payment") return {
+						...t,
+						status: "accepted"
+					};
+					heldAccepted.current.delete(t.id);
+					return t;
+				});
+				setTickets(next);
 				const pinged = list.filter((t) => t.chatUnread > 0 && t.chatThreadId);
 				let prefer = "";
 				if (!primedChat.current) {
@@ -18217,6 +18376,7 @@ function AdminPos() {
 				children: shown.map((t) => {
 					const open = openId === t.id;
 					const bucket = posBucket(t.status);
+					const stamp = posStamp(t.status);
 					const where = ticketWhere(t);
 					return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("li", {
 						className: "pos-row",
@@ -18270,8 +18430,8 @@ function AdminPos() {
 								}) : null,
 								/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
 									className: "pos-st",
-									"data-tone": bucket,
-									children: bucket
+									"data-tone": stamp.tone,
+									children: stamp.label
 								})
 							]
 						}), t.chatUnread > 0 && t.chatThreadId ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Link, {
@@ -18376,7 +18536,7 @@ function AdminPos() {
 									" · ",
 									formatUsd(t.total),
 									" · ",
-									posBucket(t.status),
+									posStamp(t.status).label,
 									t.scheduledFor ? ` · ${formatShopWhen(t.scheduledFor)}` : ""
 								] })]
 							}) }, t.id))

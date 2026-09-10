@@ -535,3 +535,12 @@
   overflow: visible;
 }
 
+.pos-accept-toast {
+  z-index: 98;
+}
+
+.pos-st[data-tone="unpaid"] {
+  background: var(--color-brass);
+  color: var(--color-cream);
+}
+

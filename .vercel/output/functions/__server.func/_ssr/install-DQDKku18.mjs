@@ -3,7 +3,7 @@ import { C as require_jsx_runtime, U as require_react, y as Link } from "../_lib
 import { g as getMe } from "./shop-server-DpagHzjx.mjs";
 import { t as useCurrentUserState } from "./use-current-user-bU2h6wsg.mjs";
 import { h as Share, p as Smartphone } from "../_libs/lucide-react.mjs";
-import { x as ShopHeader } from "./router-CMr1IWu0.mjs";
+import { x as ShopHeader } from "./router-C6vZUAg_.mjs";
 //#region node_modules/.nitro/vite/services/ssr/assets/install-DQDKku18.js
 var install_DQDKku18_exports = /* @__PURE__ */ __exportAll({ component: () => InstallPage });
 var import_react = /* @__PURE__ */ __toESM(require_react());

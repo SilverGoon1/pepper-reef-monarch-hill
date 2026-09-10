@@ -7,6 +7,7 @@ import { onVisibleInterval } from "@/lib/page-visible";
 
 const DEFAULT_ALARM = "/order-alarm.wav";
 const SNOOZE_KEY = "southend-order-snooze";
+export const POS_ACCEPTED_EVENT = "southend-pos-accepted";
 
 function loadSnooze() {
   try {
@@ -26,17 +27,38 @@ function saveSnooze(ids: Set<string>) {
   }
 }
 
+function fifoIncoming(list: PosTicket[]) {
+  return [...list].sort((a, b) => {
+    const ta = Date.parse(a.createdAt) || 0;
+    const tb = Date.parse(b.createdAt) || 0;
+    if (ta !== tb) return ta - tb;
+    return (a.ticketNo || 0) - (b.ticketNo || 0) || a.id.localeCompare(b.id);
+  });
+}
+
+function emitPosAccepted(order: PosTicket) {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent(POS_ACCEPTED_EVENT, { detail: order }));
+}
+
 export function IncomingOrderQueue() {
   const [queue, setQueue] = useState<PosTicket[]>([]);
+  const [currentId, setCurrentId] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [muted, setMuted] = useState(false);
   const [src, setSrc] = useState(DEFAULT_ALARM);
+  const [toast, setToast] = useState("");
   const seen = useRef(new Set<string>());
   const snoozed = useRef(loadSnooze());
+  const taken = useRef(new Set<string>());
   const primed = useRef(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const mutedRef = useRef(false);
+  const mutedRef = useRef(muted);
+
+  useEffect(() => {
+    mutedRef.current = muted;
+  }, [muted]);
 
   useEffect(() => {
     void getAdminShop()
@@ -54,6 +76,12 @@ export function IncomingOrderQueue() {
     };
   }, [src]);
 
+  useEffect(() => {
+    if (!toast) return;
+    const t = window.setTimeout(() => setToast(""), 3200);
+    return () => window.clearTimeout(t);
+  }, [toast]);
+
   function ring() {
     if (mutedRef.current) return;
     const el = audioRef.current;
@@ -62,21 +90,27 @@ export function IncomingOrderQueue() {
     void el.play().catch(() => undefined);
   }
 
+  function applyIncoming(list: PosTicket[]) {
+    const live = fifoIncoming(list.filter((t) => !snoozed.current.has(t.id) && !taken.current.has(t.id)));
+    setQueue(live);
+    setCurrentId((cur) => {
+      if (cur && live.some((t) => t.id === cur)) return cur;
+      return live[0]?.id ?? "";
+    });
+    const fresh = live.filter((t) => !seen.current.has(t.id));
+    for (const t of live) seen.current.add(t.id);
+    if (fresh.length) ring();
+    else if (!primed.current && live.length) ring();
+    primed.current = true;
+  }
+
   useEffect(() => {
     return onVisibleInterval(4000, () => {
       void listIncomingOrders()
-        .then((list) => {
-          const live = list.filter((t) => !snoozed.current.has(t.id));
-          setQueue(live);
-          const fresh = live.filter((t) => !seen.current.has(t.id));
-          for (const t of live) seen.current.add(t.id);
-          if (fresh.length) ring();
-          else if (!primed.current && live.length) ring();
-          primed.current = true;
-        })
+        .then(applyIncoming)
         .catch(() => undefined);
     });
-  }, [muted, src]);
+  }, [src]);
 
   useEffect(() => {
     if (!queue.length || muted) return;
@@ -84,19 +118,52 @@ export function IncomingOrderQueue() {
     return () => window.clearInterval(t);
   }, [queue.length, muted, src]);
 
-  const current = queue[0];
-  if (!current) return null;
+  const current = queue.find((t) => t.id === currentId) ?? queue[0];
+  const place = current ? queue.findIndex((t) => t.id === current.id) + 1 : 0;
 
   function take() {
+    if (!current || busy || taken.current.has(current.id)) return;
+    const ticket = current;
+    taken.current.add(ticket.id);
     setBusy(true);
     setError("");
-    void acceptOrder({ data: { id: current.id } })
-      .then(() => {
-        setQueue((list) => list.filter((t) => t.id !== current.id));
+    const remaining = queue.filter((t) => t.id !== ticket.id);
+    setQueue(remaining);
+    setCurrentId(remaining[0]?.id ?? "");
+    void acceptOrder({ data: { id: ticket.id } })
+      .then((order) => {
+        const accepted: PosTicket = {
+          ...ticket,
+          ...order,
+          status: "accepted",
+          customerName: ticket.customerName,
+          customerPhone: ticket.customerPhone,
+          chatUnread: ticket.chatUnread,
+          chatThreadId: ticket.chatThreadId,
+        };
+        emitPosAccepted(accepted);
+        setToast(`Ticket #${formatTicketNo(accepted.ticketNo)} accepted — sent to the kitchen.`);
       })
-      .catch((e) => setError(e instanceof Error ? e.message : "Could not accept"))
+      .catch((e) => {
+        taken.current.delete(ticket.id);
+        setError(e instanceof Error ? e.message : "Could not accept");
+        setQueue((list) => {
+          if (list.some((t) => t.id === ticket.id)) return list;
+          return fifoIncoming([ticket, ...list]);
+        });
+        setCurrentId(ticket.id);
+      })
       .finally(() => setBusy(false));
   }
+
+  const toastEl = toast ? (
+    <div className="save-toast pos-accept-toast" data-ok="true" role="status">
+      <strong>Accepted</strong>
+      <span>{toast}</span>
+    </div>
+  ) : null;
+
+  if (!current) return toastEl;
 
   const where =
     current.fulfillment === "delivery"
@@ -106,91 +173,102 @@ export function IncomingOrderQueue() {
         : "Pickup at the counter";
 
   return (
-    <div className="order-alert-scrim" role="dialog" aria-modal="true" aria-labelledby="order-alert-title">
-      <section className="order-alert">
-        <header className="order-alert-head">
-          <p className="shop-brand-kicker">
-            <Bell size={14} strokeWidth={2.4} /> Incoming
+    <>
+      {toastEl}
+      <div className="order-alert-scrim" role="dialog" aria-modal="true" aria-labelledby="order-alert-title">
+        <section className="order-alert">
+          <header className="order-alert-head">
+            <p className="shop-brand-kicker">
+              <Bell size={14} strokeWidth={2.4} /> Incoming · oldest first
+            </p>
+            <h2 id="order-alert-title">Ticket #{formatTicketNo(current.ticketNo)}</h2>
+            {queue.length > 1 ? (
+              <em className="order-alert-q">
+                {queue.length} tickets waiting for the kitchen · showing {place} of {queue.length}, oldest first
+              </em>
+            ) : (
+              <em className="order-alert-q">Oldest ticket waiting for the kitchen</em>
+            )}
+            <button
+              type="button"
+              className="ed-icon-btn"
+              aria-label={muted ? "Unmute alarm" : "Mute alarm"}
+              onClick={() => {
+                mutedRef.current = !mutedRef.current;
+                setMuted(mutedRef.current);
+                audioRef.current?.pause();
+              }}
+            >
+              {muted ? <VolumeX size={16} strokeWidth={2.2} /> : <Volume2 size={16} strokeWidth={2.2} />}
+            </button>
+          </header>
+          <p className="order-alert-who">
+            <strong>{current.customerName}</strong>
+            <span>
+              {current.fulfillment === "delivery" ? "Delivery" : "Pickup"} · {formatUsd(current.total)}
+            </span>
           </p>
-          <h2 id="order-alert-title">Ticket #{formatTicketNo(current.ticketNo)}</h2>
-          {queue.length > 1 ? (
-            <em className="order-alert-q">
-              {queue.length} waiting · showing 1 of {queue.length}
-            </em>
-          ) : (
-            <em className="order-alert-q">Kitchen queue</em>
-          )}
+          <p className="ed-sub">
+            Placed {formatShopWhen(current.createdAt)}
+            {current.scheduledFor ? ` · scheduled ${formatShopWhen(current.scheduledFor)}` : " · as soon as ready"}
+          </p>
+          <p className="ed-sub">{where}</p>
+          <ul className="cart-lines">
+            {current.items.slice(0, 8).map((it, i) => (
+              <li key={`${it.itemId}-${i}`}>
+                <span>
+                  {it.qty}× {it.name}
+                  {it.size ? ` · ${it.size}` : ""}
+                </span>
+                <span>{formatUsd(it.unitPrice * it.qty)}</span>
+              </li>
+            ))}
+          </ul>
+          {current.notes ? (
+            <p className="pos-notes">
+              <strong>Notes</strong> {current.notes}
+            </p>
+          ) : null}
+          {error ? <p className="form-error">{error}</p> : null}
+          <div className="confirm-actions">
+            <button type="button" className="btn-print" disabled={busy || taken.current.has(current.id)} onClick={take}>
+              {busy ? "Accepting…" : "Accept order"}
+            </button>
+            {queue.length > 1 ? (
+              <button
+                type="button"
+                className="ed-btn"
+                disabled={busy}
+                onClick={() => {
+                  const i = queue.findIndex((t) => t.id === current.id);
+                  const next = queue[(i + 1 + queue.length) % queue.length];
+                  if (next) setCurrentId(next.id);
+                }}
+              >
+                Show next oldest
+              </button>
+            ) : null}
+          </div>
+          <p className="ed-sub">
+            Accept sends this ticket to the kitchen and cannot be tapped twice. Other waiting tickets stay in this
+            pop-up, oldest first.
+          </p>
           <button
             type="button"
-            className="ed-icon-btn"
-            aria-label={muted ? "Unmute alarm" : "Mute alarm"}
+            className="order-alert-hide"
+            aria-label="Hide incoming pop-ups for now. Tickets stay on the Open board."
             onClick={() => {
-              mutedRef.current = !mutedRef.current;
-              setMuted(mutedRef.current);
+              for (const t of queue) snoozed.current.add(t.id);
+              saveSnooze(snoozed.current);
+              setQueue([]);
+              setCurrentId("");
               audioRef.current?.pause();
             }}
           >
-            {muted ? <VolumeX size={16} strokeWidth={2.2} /> : <Volume2 size={16} strokeWidth={2.2} />}
+            <X size={14} strokeWidth={2.4} /> Hide pop-ups — tickets stay on Open
           </button>
-        </header>
-        <p className="order-alert-who">
-          <strong>{current.customerName}</strong>
-          <span>
-            {current.fulfillment === "delivery" ? "Delivery" : "Pickup"} · {formatUsd(current.total)}
-          </span>
-        </p>
-        <p className="ed-sub">
-          Placed {formatShopWhen(current.createdAt)}
-          {current.scheduledFor ? ` · scheduled ${formatShopWhen(current.scheduledFor)}` : " · as soon as ready"}
-        </p>
-        <p className="ed-sub">{where}</p>
-        <ul className="cart-lines">
-          {current.items.slice(0, 8).map((it, i) => (
-            <li key={`${it.itemId}-${i}`}>
-              <span>
-                {it.qty}× {it.name}
-                {it.size ? ` · ${it.size}` : ""}
-              </span>
-              <span>{formatUsd(it.unitPrice * it.qty)}</span>
-            </li>
-          ))}
-        </ul>
-        {current.notes ? (
-          <p className="pos-notes">
-            <strong>Notes</strong> {current.notes}
-          </p>
-        ) : null}
-        {error ? <p className="form-error">{error}</p> : null}
-        <div className="confirm-actions">
-          <button type="button" className="btn-print" disabled={busy} onClick={take}>
-            {busy ? "Accepting…" : "Accept order"}
-          </button>
-          {queue.length > 1 ? (
-            <button
-              type="button"
-              className="ed-btn"
-              disabled={busy}
-              onClick={() => setQueue((list) => [...list.slice(1), list[0]])}
-            >
-              Next in queue
-            </button>
-          ) : null}
-        </div>
-        <p className="ed-sub">Accepting sends the ticket to the kitchen. Remaining tickets stay in this queue.</p>
-        <button
-          type="button"
-          className="order-alert-hide"
-          aria-label="Keep ticket waiting"
-          onClick={() => {
-            for (const t of queue) snoozed.current.add(t.id);
-            saveSnooze(snoozed.current);
-            setQueue([]);
-            audioRef.current?.pause();
-          }}
-        >
-          <X size={14} strokeWidth={2.4} /> Keep waiting on POS
-        </button>
-      </section>
-    </div>
+        </section>
+      </div>
+    </>
   );
 }

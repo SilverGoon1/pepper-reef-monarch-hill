@@ -7,6 +7,15 @@ export type PatchEntry = {
 
 export const PATCHES: PatchEntry[] = [
   {
+    id: "2026-09-10-pos-accept-queue",
+    date: "September 10, 2026",
+    title: "POS accept queue is staff-safe",
+    added: [
+      "Incoming tickets line up oldest first, Accept can only fire once, and the board shows a ticket number confirmation.",
+      "Staff account load no longer dies on a duplicate profile row.",
+    ],
+  },
+  {
     id: "2026-09-10-admin-sign-out",
     date: "September 10, 2026",
     title: "Admin can sign out",

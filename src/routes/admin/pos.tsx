@@ -19,6 +19,7 @@ import {
 } from "@/lib/shop-types";
 import type { MenuCategory, MenuItem, RestaurantInfo } from "@/data/menu";
 import { RESTAURANT } from "@/data/menu";
+import { POS_ACCEPTED_EVENT } from "@/components/incoming-order-queue";
 
 export const Route = createFileRoute("/admin/pos")({
   validateSearch: (search: Record<string, unknown>): { ticket?: string } => {
@@ -40,6 +41,13 @@ function posBucket(status: string): PosBucket {
   if (status === "completed") return "completed";
   if (status === "placed" || status === "awaiting_payment" || status === "canceled") return "placed";
   return "accepted";
+}
+
+function posStamp(status: string) {
+  if (status === "awaiting_payment") return { tone: "unpaid", label: "unpaid" };
+  if (status === "canceled") return { tone: "placed", label: "canceled" };
+  const bucket = posBucket(status);
+  return { tone: bucket, label: bucket };
 }
 
 function priceNum(p: string) {
@@ -303,6 +311,18 @@ function AdminPos() {
   const [chromeHost, setChromeHost] = useState<Element | null>(null);
   const seenChat = useRef(new Set<string>());
   const primedChat = useRef(false);
+  const heldAccepted = useRef(new Set<string>());
+
+  useEffect(() => {
+    const onAccepted = (event: Event) => {
+      const order = (event as CustomEvent<PosTicket>).detail;
+      if (!order?.id) return;
+      heldAccepted.current.add(order.id);
+      setTickets((list) => list.map((t) => (t.id === order.id ? { ...t, ...order, status: "accepted" } : t)));
+    };
+    window.addEventListener(POS_ACCEPTED_EVENT, onAccepted);
+    return () => window.removeEventListener(POS_ACCEPTED_EVENT, onAccepted);
+  }, []);
 
   useEffect(() => {
     setChromeHost(document.getElementById("admin-top-extra"));
@@ -312,7 +332,13 @@ function AdminPos() {
     return onVisibleInterval(6000, () => {
       void listPosOrders()
         .then((list) => {
-          setTickets(list);
+          const next = list.map((t) => {
+            if (!heldAccepted.current.has(t.id)) return t;
+            if (t.status === "placed" || t.status === "awaiting_payment") return { ...t, status: "accepted" };
+            heldAccepted.current.delete(t.id);
+            return t;
+          });
+          setTickets(next);
           const pinged = list.filter((t) => t.chatUnread > 0 && t.chatThreadId);
           let prefer = "";
           if (!primedChat.current) {
@@ -476,6 +502,7 @@ function AdminPos() {
           {shown.map((t) => {
             const open = openId === t.id;
             const bucket = posBucket(t.status);
+            const stamp = posStamp(t.status);
             const where = ticketWhere(t);
             return (
               <li key={t.id} className="pos-row" data-open={open} data-status={bucket} data-chat={t.chatUnread > 0 ? "true" : undefined}>
@@ -511,8 +538,8 @@ function AdminPos() {
                       <span className="nav-pip">{t.chatUnread > 9 ? "9+" : t.chatUnread}</span>
                     </span>
                   ) : null}
-                  <span className="pos-st" data-tone={bucket}>
-                    {bucket}
+                  <span className="pos-st" data-tone={stamp.tone}>
+                    {stamp.label}
                   </span>
                 </button>
                 {t.chatUnread > 0 && t.chatThreadId ? (
@@ -597,7 +624,7 @@ function AdminPos() {
                     >
                       <strong>{t.customerName}</strong>
                       <em>
-                        #{formatTicketNo(t.ticketNo)} · {formatUsd(t.total)} · {posBucket(t.status)}
+                        #{formatTicketNo(t.ticketNo)} · {formatUsd(t.total)} · {posStamp(t.status).label}
                         {t.scheduledFor ? ` · ${formatShopWhen(t.scheduledFor)}` : ""}
                       </em>
                     </button>

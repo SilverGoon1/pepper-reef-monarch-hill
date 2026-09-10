@@ -1,8 +1,39 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Link, Navigate, useRouterState } from "@tanstack/react-router";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
+import { isTransientFetchError } from "@/lib/fetch-retry";
 import { claimAdmin, getMe, getTwoFactorStatus } from "@/lib/shop-server";
 import type { ProfileView, TwoFactorStatus } from "@/lib/shop-types";
+
+function accountLoadMessage(err: unknown) {
+  const raw = err instanceof Error ? err.message : "";
+  const lower = raw.toLowerCase();
+  if (lower.includes("profiles_pkey") || lower.includes("duplicate key") || lower.includes("unique constraint")) {
+    return "The shop is still opening your staff account. Tap Try again.";
+  }
+  if (isTransientFetchError(err)) {
+    return "The shop did not answer. Tap Try again.";
+  }
+  return raw.trim() || "Could not load your staff account.";
+}
+
+async function loadStaffAccount() {
+  let last: unknown;
+  for (let i = 0; i < 3; i += 1) {
+    try {
+      return await Promise.all([getMe(), getTwoFactorStatus()]);
+    } catch (err) {
+      last = err;
+      const msg = err instanceof Error ? err.message : "";
+      const retryable =
+        isTransientFetchError(err) ||
+        /profiles_pkey|duplicate key|unique constraint/i.test(msg);
+      if (!retryable || i === 2) throw err;
+      await new Promise((resolve) => setTimeout(resolve, 280 * (i + 1)));
+    }
+  }
+  throw last;
+}
 
 export function SessionGate({
   children,
@@ -24,9 +55,9 @@ export function SessionGate({
     let live = true;
     const timeout = window.setTimeout(() => {
       if (!live) return;
-      setError("Account is taking too long. Try again.");
-    }, 12000);
-    Promise.all([getMe(), getTwoFactorStatus()])
+      setError("Account is taking too long. Tap Try again.");
+    }, 14000);
+    void loadStaffAccount()
       .then(([p, t]) => {
         if (!live) return;
         window.clearTimeout(timeout);
@@ -36,7 +67,7 @@ export function SessionGate({
       .catch((e) => {
         if (!live) return;
         window.clearTimeout(timeout);
-        setError(e instanceof Error ? e.message : "Could not load account");
+        setError(accountLoadMessage(e));
       });
     return () => {
       live = false;
@@ -52,8 +83,9 @@ export function SessionGate({
   if (error) {
     return (
       <div className="page-card">
-        <h1>Could not load account</h1>
+        <h1>Could not load your account</h1>
         <p>{error}</p>
+        <p className="ed-sub">Nothing was lost. Tap Try again to open the shop desk.</p>
         <button
           type="button"
           className="btn-print"
