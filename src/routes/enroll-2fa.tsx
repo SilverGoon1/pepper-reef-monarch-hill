@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
@@ -29,15 +29,21 @@ function Enroll2fa() {
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
 
+  const setupStarted = useRef(false);
+
   useEffect(() => {
-    if (!user) return;
+    if (!user?.id || setupStarted.current) return;
+    setupStarted.current = true;
     void startTotpSetup()
       .then((r) => {
         setSecret(r.secret);
         setUri(r.uri);
       })
-      .catch((err) => setError(err instanceof Error ? err.message : "Could not start setup"));
-  }, [user]);
+      .catch((err) => {
+        setupStarted.current = false;
+        setError(err instanceof Error ? err.message : "Could not start setup");
+      });
+  }, [user?.id]);
 
   if (isPending) return <div className="page-skel">Checking sign-in…</div>;
   if (!user) return <RedirectToSignIn />;
