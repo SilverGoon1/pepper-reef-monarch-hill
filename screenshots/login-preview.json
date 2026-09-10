@@ -1,0 +1,36 @@
+{
+  "url": "http://127.0.0.1:8080/login",
+  "viewports": {
+    "desktop": {
+      "width": 1280,
+      "height": 800,
+      "status": 200,
+      "title": "South End Pizza III",
+      "hasCanvas": false,
+      "bodyTextLen": 33,
+      "bodyTextHash": "59b5b195b8bb2a733df813bb90bd1cafe556e9136ed299c97d0e48872f838220",
+      "bodyTextPrefix": "Skip to content Checking sign-in…",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/login-preview.png"
+    },
+    "mobile": {
+      "width": 390,
+      "height": 844,
+      "status": 200,
+      "title": "South End Pizza III",
+      "hasCanvas": false,
+      "bodyTextLen": 33,
+      "bodyTextHash": "59b5b195b8bb2a733df813bb90bd1cafe556e9136ed299c97d0e48872f838220",
+      "bodyTextPrefix": "Skip to content Checking sign-in…",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/login-preview-mobile.png"
+    }
+  },
+  "brandWarnings": [],
+  "authWarnings": [],
+  "verdictFile": "/workspace/screenshots/login-preview.json"
+}

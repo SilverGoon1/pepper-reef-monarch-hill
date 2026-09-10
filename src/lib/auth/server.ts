@@ -103,10 +103,52 @@ const LOCAL_DEV_ORIGINS: string[] = [
   "http://127.0.0.1:8080",
   "http://[::1]:8080",
 ];
+
+function extraDeployOrigins(): string[] {
+  const origins: string[] = [];
+  const addHost = (raw: string | undefined) => {
+    if (!raw) return;
+    const host = raw.replace(/^https?:\/\//, "").split("/")[0]?.trim();
+    if (!host) return;
+    origins.push(`https://${host}`);
+  };
+  addHost(env("VERCEL_PROJECT_PRODUCTION_URL"));
+  addHost(env("VERCEL_URL"));
+  addHost(env("VITE_PUBLIC_HOSTNAME"));
+  return origins;
+}
+
+function originFromHost(hostHeader: string | null, protoHeader: string | null, fallbackProto: string): string | null {
+  const host = hostHeader?.split(",")[0]?.trim();
+  if (!host) return null;
+  const proto = (protoHeader?.split(",")[0]?.trim() || fallbackProto).replace(/:$/, "");
+  try {
+    return new URL(`${proto}://${host}`).origin;
+  } catch {
+    return null;
+  }
+}
+
+const staticTrustedOrigins: string[] = [
+  ...(explicitBaseURL ? [explicitBaseURL] : []),
+  ...previewAllowedHosts,
+  ...previewAllowedHosts.flatMap((host) => [`https://${host}`, `http://${host}`]),
+  ...LOCAL_DEV_ORIGINS,
+  ...extraDeployOrigins(),
+];
+
 const baseURL = explicitBaseURL ?? {
   // Include loopback hosts so dynamic baseURL resolves for local email/password
-  // (not only the preview wildcard).
-  allowedHosts: [...previewAllowedHosts, "localhost", "127.0.0.1", "[::1]"],
+  // (not only the preview wildcard). Vercel / GitHub Pages hosts let a live
+  // build without BETTER_AUTH_URL still mint a matching OAuth redirect_uri.
+  allowedHosts: [
+    ...previewAllowedHosts,
+    "localhost",
+    "127.0.0.1",
+    "[::1]",
+    "*.vercel.app",
+    "*.github.io",
+  ],
   // `auto` → trust both http:// and https:// expansions of allowedHosts
   // (preview is https; local dev is http).
   protocol: "auto" as const,
@@ -115,15 +157,32 @@ const baseURL = explicitBaseURL ?? {
 
 // Origins Better Auth accepts on credentialed POSTs (sign-up/sign-in, etc.).
 // Missing entries here surface as FORBIDDEN "Invalid origin".
-const trustedOrigins: string[] = explicitBaseURL
-  ? [explicitBaseURL, ...LOCAL_DEV_ORIGINS]
-  : [
-      // Host wildcards (matched against Origin's host)
-      ...previewAllowedHosts,
-      // Full-origin wildcards (matched against Origin)
-      ...previewAllowedHosts.flatMap((host) => [`https://${host}`, `http://${host}`]),
-      ...LOCAL_DEV_ORIGINS,
-    ];
+// GitHub / Vercel live hosts are not always BETTER_AUTH_URL — trust this
+// request's own origin (and forwarded host) so same-origin Admin sign-in
+// works. Do not wildcard `*.grok.me` (sibling CSRF).
+const trustedOrigins = async (request?: Request): Promise<string[]> => {
+  const origins = new Set(staticTrustedOrigins);
+  if (!request) return [...origins];
+  const fallbackProto = request.url.startsWith("http://") ? "http" : "https";
+  try {
+    origins.add(new URL(request.url).origin);
+  } catch {
+    /* ignore malformed request URLs */
+  }
+  const forwarded = originFromHost(
+    request.headers.get("x-forwarded-host"),
+    request.headers.get("x-forwarded-proto"),
+    fallbackProto,
+  );
+  const hostOrigin = originFromHost(
+    request.headers.get("host"),
+    request.headers.get("x-forwarded-proto"),
+    fallbackProto,
+  );
+  if (forwarded) origins.add(forwarded);
+  if (hostOrigin) origins.add(hostOrigin);
+  return [...origins];
+};
 
 const databaseUrl = env("DATABASE_URL");
 
@@ -222,6 +281,7 @@ export const auth = betterAuth({
   // `http://localhost`, so local dev still works.)
   advanced: {
     useSecureCookies: false,
+    trustedProxyHeaders: true,
     defaultCookieAttributes: { secure: true, sameSite: "lax", path: "/" },
     cookies: {
       session_token: { name: SESSION_TOKEN_COOKIE },

@@ -1,7 +1,9 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { createFileRoute, Link, Navigate, useNavigate } from "@tanstack/react-router";
-import { GROK_PROVIDERS, authClient, authEnabled, signIn } from "@/lib/auth/client";
+import { X } from "lucide-react";
+import { GROK_PROVIDERS, authClient, authEnabled } from "@/lib/auth/client";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
+import { friendlyAuthError, startSocialSignIn } from "@/lib/login-social";
 import { identifierToEmail } from "@/lib/phone";
 import { captureReferral, peekReferral } from "@/lib/referral";
 import { claimReferral, getStorefront, updateProfile } from "@/lib/shop-server";
@@ -15,30 +17,61 @@ function safeNext(raw: unknown) {
 }
 
 export const Route = createFileRoute("/login")({
-  validateSearch: (search: Record<string, unknown>): { next?: string; ref?: string } => {
+  validateSearch: (search: Record<string, unknown>): { next?: string; ref?: string; error?: string } => {
     const next = safeNext(search.next);
     const ref = typeof search.ref === "string" ? search.ref.trim().toUpperCase() : "";
-    const out: { next?: string; ref?: string } = {};
+    const error = typeof search.error === "string" ? search.error.trim() : "";
+    const out: { next?: string; ref?: string; error?: string } = {};
     if (next) out.next = next;
     if (/^[A-Z0-9]{4,16}$/.test(ref)) out.ref = ref;
+    if (error) out.error = error.slice(0, 180);
     return out;
   },
   component: Login,
 });
 
+function GoogleMark() {
+  return (
+    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+      <path
+        fill="currentColor"
+        d="M21.35 11.1h-9.18v2.96h5.27c-.23 1.37-1.55 4.02-5.27 4.02A6.13 6.13 0 1 1 12.17 5.9c1.75 0 2.93.75 3.6 1.4l2.45-2.36C16.8 3.54 14.7 2.6 12.17 2.6A9.4 9.4 0 1 0 21.57 12c0-.6-.06-.9-.22-.9Z"
+      />
+    </svg>
+  );
+}
+
+function XMark() {
+  return (
+    <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+      <path
+        fill="currentColor"
+        d="M14.1 10.35 21.2 2h-1.68l-6.16 7.24L8.44 2H2.5l7.45 10.86L2.5 22h1.68l6.52-7.66L15.56 22H21.5l-7.4-11.65Zm-2.3 2.71-.76-1.08-6.02-8.6h2.59l4.86 6.95.76 1.08 6.32 9.04h-2.59l-5.16-7.39Z"
+      />
+    </svg>
+  );
+}
+
+function providerMark(label: string) {
+  if (label === "X") return <XMark />;
+  return <GoogleMark />;
+}
+
 function Login() {
   const { user, isPending } = useCurrentUserState();
   const navigate = useNavigate();
-  const { next, ref } = Route.useSearch();
+  const { next, ref, error: searchError } = Route.useSearch();
   const [mode, setMode] = useState<"email" | "phone">("email");
   const [tab, setTab] = useState<"in" | "up">("in");
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [password2, setPassword2] = useState("");
   const [name, setName] = useState("");
-  const [error, setError] = useState("");
+  const [error, setError] = useState(searchError ? friendlyAuthError(new Error(searchError)) : "");
   const [busy, setBusy] = useState(false);
   const [showMark, setShowMark] = useState(true);
+
+  const closeTo = (next || "/") as "/";
 
   useEffect(() => {
     captureReferral(ref);
@@ -53,7 +86,7 @@ function Login() {
   // Keep the form up while a submit is in flight so a session refetch cannot
   // trap the visitor on "Checking sign-in…" after email login.
   if (isPending && !busy) return <div className="page-skel">Checking sign-in…</div>;
-  if (user && !busy) return <Navigate to={(next || "/") as "/"} replace />;
+  if (user && !busy) return <Navigate to={closeTo} replace />;
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -103,27 +136,48 @@ function Login() {
         });
         if (err) throw new Error(err.message || "Could not sign in.");
       }
-      const dest = (next || "/") as "/";
-      // Leave `busy` set so a session refetch cannot swap this form for
-      // "Checking sign-in…". Do not wait on getSession — Better Auth already
-      // updated the client store, and a hung session call felt like a stall.
-      void navigate({ to: dest, replace: true });
+      void navigate({ to: closeTo, replace: true });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Sign-in failed.");
+      setError(friendlyAuthError(err));
+      setBusy(false);
+    }
+  }
+
+  async function social(providerId: string) {
+    setError("");
+    setBusy(true);
+    try {
+      if (!authEnabled) throw new Error("Sign-in is disabled.");
+      await startSocialSignIn(providerId, {
+        callbackURL: next || "/",
+        errorCallbackURL: "/login",
+      });
+      void navigate({ to: closeTo, replace: true });
+    } catch (err) {
+      setError(friendlyAuthError(err));
       setBusy(false);
     }
   }
 
   return (
-    <main className="login-page">
-      <div className="login-card">
+    <main className="login-page" data-popup="true">
+      <Link to={closeTo} className="login-scrim" aria-label="Close sign-in" />
+      <section
+        className="login-card login-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="login-title"
+      >
+        <Link to={closeTo} className="login-close" aria-label="Back to the menu">
+          <X size={18} strokeWidth={2.4} aria-hidden />
+        </Link>
         {showMark ? <BrandMark variant="login" /> : null}
         <p className="shop-brand-kicker">South End Pizza III</p>
-        <h1>{tab === "up" ? "Create account" : "Sign in"}</h1>
+        <h1 id="login-title">{tab === "up" ? "Create account" : "Welcome back"}</h1>
         <p className="ed-sub">
           {next === "/checkout"
-            ? "Sign in to place your order, or go back and check out as a guest. Your cart stays on this device."
-            : "Use email, the shop username, or a US phone number plus a password. Google and X work too."}
+            ? "Sign in to place your order, or check out as a guest. Your cart stays on this device."
+            : "Email, the shop username, or a US phone number. Google and X work too."}
         </p>
         <div className="seg" role="group" aria-label="Identifier type">
           <button type="button" data-on={mode === "email"} onClick={() => setMode("email")}>
@@ -196,27 +250,27 @@ function Login() {
             </Link>
           ) : null}
         </form>
-        <div className="login-split">or</div>
-        {GROK_PROVIDERS.map((p) => (
-          <button
-            key={p.providerId}
-            type="button"
-            className="ed-btn"
-            disabled={busy}
-            onClick={() => void signIn(p.providerId, { callbackURL: next || "/" })}
-          >
-            Continue with {p.label}
-          </button>
-        ))}
-        <Link to="/" className="login-back">
-          Back to the menu
-        </Link>
+        <div className="login-split">or continue with</div>
+        <div className="login-socials">
+          {GROK_PROVIDERS.map((p) => (
+            <button
+              key={p.providerId}
+              type="button"
+              className="login-social"
+              disabled={busy}
+              onClick={() => void social(p.providerId)}
+            >
+              {providerMark(p.label)}
+              {p.label}
+            </button>
+          ))}
+        </div>
         {next === "/checkout" ? (
           <Link to="/checkout" className="login-back">
             Checkout as a guest
           </Link>
         ) : null}
-      </div>
+      </section>
     </main>
   );
 }

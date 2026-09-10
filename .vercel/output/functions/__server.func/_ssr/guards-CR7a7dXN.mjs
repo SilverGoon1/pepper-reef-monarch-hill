@@ -1,0 +1,136 @@
+import { o as __toESM } from "../_runtime.mjs";
+import { C as require_jsx_runtime, U as require_react, b as Navigate, f as useRouterState, y as Link } from "../_libs/@tanstack/react-router+[...].mjs";
+import { b as getTwoFactorStatus, g as getMe, o as claimAdmin } from "./shop-server-DpagHzjx.mjs";
+import { t as useCurrentUserState } from "./use-current-user-bU2h6wsg.mjs";
+//#region node_modules/.nitro/vite/services/ssr/assets/guards-CR7a7dXN.js
+var import_react = /* @__PURE__ */ __toESM(require_react());
+var import_jsx_runtime = require_jsx_runtime();
+function SessionGate({ children, needAdmin }) {
+	const { user, isPending } = useCurrentUserState();
+	const pathname = useRouterState({ select: (s) => s.location.pathname });
+	const [profile, setProfile] = (0, import_react.useState)(null);
+	const [twoFactor, setTwoFactor] = (0, import_react.useState)(null);
+	const [error, setError] = (0, import_react.useState)("");
+	const [claiming, setClaiming] = (0, import_react.useState)(false);
+	const [retry, setRetry] = (0, import_react.useState)(0);
+	(0, import_react.useEffect)(() => {
+		if (isPending || !user) return;
+		let live = true;
+		const timeout = window.setTimeout(() => {
+			if (!live) return;
+			setError("Account is taking too long. Try again.");
+		}, 12e3);
+		Promise.all([getMe(), getTwoFactorStatus()]).then(([p, t]) => {
+			if (!live) return;
+			window.clearTimeout(timeout);
+			setProfile(p);
+			setTwoFactor(t);
+		}).catch((e) => {
+			if (!live) return;
+			window.clearTimeout(timeout);
+			setError(e instanceof Error ? e.message : "Could not load account");
+		});
+		return () => {
+			live = false;
+			window.clearTimeout(timeout);
+		};
+	}, [
+		isPending,
+		user,
+		retry
+	]);
+	if (isPending) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+		className: "page-skel",
+		children: "Loading account…"
+	});
+	if (!user) {
+		const next = pathname.startsWith("/") && !pathname.startsWith("//") ? pathname : "/";
+		return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Navigate, {
+			to: "/login",
+			search: { next }
+		});
+	}
+	if (error) return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+		className: "page-card",
+		children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h1", { children: "Could not load account" }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { children: error }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+				type: "button",
+				className: "btn-print",
+				onClick: () => {
+					setError("");
+					setProfile(null);
+					setTwoFactor(null);
+					setRetry((n) => n + 1);
+				},
+				children: "Try again"
+			})
+		]
+	});
+	if (!profile || !twoFactor) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+		className: "page-skel",
+		children: "Loading account…"
+	});
+	if (profile.banned) return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+		className: "page-card",
+		children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h1", { children: "Account restricted" }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { children: "This account has been restricted. Call the shop if you need help." }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Link, {
+				to: "/",
+				className: "btn-ghost",
+				children: "Back to menu"
+			})
+		]
+	});
+	if (twoFactor.required) return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+		className: "page-card",
+		children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h1", { children: "Two-factor check" }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { children: "Enter the code from your authenticator app to continue." }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Link, {
+				to: "/verify-2fa",
+				className: "btn-print",
+				children: "Verify"
+			})
+		]
+	});
+	if (needAdmin && profile.role !== "admin") {
+		if (!profile.adminExists) return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+			className: "page-card",
+			children: [
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h1", { children: "Set up shop admin" }),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { children: "No administrator exists yet. Claim this account as the shop admin to manage delivery zones, rewards, vacation mode, and the live menu." }),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+					type: "button",
+					className: "btn-print",
+					disabled: claiming,
+					onClick: () => {
+						setClaiming(true);
+						claimAdmin().then(() => getMe().then(setProfile)).catch((e) => setError(e instanceof Error ? e.message : "Could not claim admin")).finally(() => setClaiming(false));
+					},
+					children: claiming ? "Saving…" : "Make this the admin account"
+				})
+			]
+		});
+		return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+			className: "page-card",
+			children: [
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h1", { children: "Staff only" }),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { children: "This area is for the shop administrator." }),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Link, {
+					to: "/",
+					className: "btn-ghost",
+					children: "Back to menu"
+				})
+			]
+		});
+	}
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_jsx_runtime.Fragment, { children: children({
+		profile,
+		twoFactor
+	}) });
+}
+//#endregion
+export { SessionGate as t };

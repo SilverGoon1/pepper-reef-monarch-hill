@@ -50,7 +50,7 @@ function harness(overrides = {}) {
   };
 }
 
-/** Live preview: the bearer is the session, so the local clear always wins. */
+/** Live preview: local clear always wins after a bounded server call. */
 const preview = (overrides = {}) => harness({ livePreview: true, ...overrides });
 
 /** Deployed: only the server can clear the `__Host-` cookie. */
@@ -95,10 +95,10 @@ test("preview: a sign-out that never settles clears and redirects once the wait 
   assert.deepEqual(h.order, ["clear", "redirect"]);
 });
 
-test("preview: no bearer means nothing to invalidate, so no request is made", async () => {
+test("preview: no bearer still asks the server (email/password cookie sessions)", async () => {
   const h = preview({ hasBearer: false });
   await h.run();
-  assert.equal(h.requests, 0);
+  assert.equal(h.requests, 1);
   assert.deepEqual(h.order, ["clear", "redirect"]);
 });
 
@@ -215,17 +215,17 @@ test("pre-sign-in: a failed clear never blocks sign-in", async () => {
   await preSignIn(true, { requestSignOut: rejects, timeoutMs: TEST_TIMEOUT_MS }).done;
 });
 
-test("pre-sign-in: the preview skips the request when there is no bearer", async () => {
+test("pre-sign-in: the preview still asks the server when there is no bearer", async () => {
   let requests = 0;
   const h = preSignIn(true, {
     hasBearer: false,
     requestSignOut: () => {
       requests += 1;
-      return hangs();
+      return Promise.resolve();
     },
   });
   await h.done;
-  assert.equal(requests, 0);
+  assert.equal(requests, 1);
   assert.equal(h.cleared, 1);
 });
 

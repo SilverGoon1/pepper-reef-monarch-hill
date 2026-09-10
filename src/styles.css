@@ -342,3 +342,196 @@
     margin-left: auto;
   }
 }
+
+.login-page[data-popup="true"] {
+  place-items: end center;
+  min-height: 100dvh;
+  padding: 0;
+  position: relative;
+}
+
+.login-scrim {
+  background: #1a141094;
+  position: absolute;
+  inset: 0;
+}
+
+@supports (color: color-mix(in lab, red, red)) {
+  .login-scrim {
+    background: color-mix(in oklab, var(--color-ink) 58%, transparent);
+  }
+}
+
+.login-dialog {
+  z-index: 2;
+  background: var(--color-paper);
+  width: min(26rem, 100%);
+  max-height: min(94dvh, 46rem);
+  color: var(--color-ink);
+  border: 1px solid var(--color-rule);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  box-shadow: 0 24px 60px -28px #1a14108c;
+  flex-direction: column;
+  gap: 0.7rem;
+  padding: 1.15rem 1.1rem 1.35rem;
+  display: flex;
+  position: relative;
+  overflow: auto;
+  animation: pizza-modal-in var(--motion-fast) ease-out;
+}
+
+.login-dialog .shop-brand-kicker {
+  text-align: center;
+}
+
+.login-dialog h1 {
+  font-family: var(--font-display);
+  text-align: center;
+  color: var(--color-ink);
+  margin: 0;
+  font-size: 1.55rem;
+  line-height: 1.15;
+}
+
+.login-dialog .ed-sub {
+  text-align: center;
+  color: var(--color-muted);
+}
+
+.login-dialog .brand-mark-login {
+  background: var(--color-cream);
+  width: 5.5rem;
+  height: 5.5rem;
+  border-color: var(--color-rule);
+}
+
+.login-close {
+  appearance: none;
+  z-index: 2;
+  color: var(--color-muted);
+  background: var(--color-cream);
+  border: 1px solid var(--color-rule);
+  border-radius: 999px;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  display: grid;
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  text-decoration: none;
+}
+
+.login-close:hover,
+.login-close:focus-visible {
+  color: var(--color-ink);
+  border-color: var(--color-ink);
+}
+
+.login-dialog .seg {
+  background: var(--color-cream);
+  border-color: var(--color-rule);
+  width: 100%;
+}
+
+.login-dialog .seg button {
+  color: var(--color-muted);
+  flex: 1;
+}
+
+.login-dialog .seg button[data-on="true"] {
+  background: var(--color-ink);
+  color: var(--color-cream);
+}
+
+.login-dialog .ed-field > span {
+  color: var(--color-muted);
+}
+
+.login-dialog .ed-input {
+  background: var(--color-cream);
+  color: var(--color-ink);
+  border-color: var(--color-rule);
+}
+
+.login-dialog .ed-input:focus {
+  outline-color: var(--color-tomato);
+}
+
+.login-dialog .login-back {
+  color: var(--color-muted);
+}
+
+.login-dialog .btn-print {
+  justify-content: center;
+  width: 100%;
+}
+
+.login-dialog .form-error {
+  background: var(--color-tomato-dark);
+  color: var(--color-cream);
+}
+
+.login-dialog .login-split {
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.login-socials {
+  gap: 0.45rem;
+  display: grid;
+}
+
+.login-social {
+  appearance: none;
+  background: var(--color-cream);
+  color: var(--color-ink);
+  border: 1px solid var(--color-rule);
+  border-radius: var(--radius-sm);
+  min-height: 44px;
+  font: 650 0.85rem/1 var(--font-sans);
+  justify-content: center;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.55rem 0.85rem;
+  display: inline-flex;
+}
+
+.login-social:hover:not(:disabled) {
+  border-color: var(--color-ink);
+}
+
+.login-social:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+@media (width >= 640px) {
+  .login-page[data-popup="true"] {
+    place-items: center;
+    padding: 1.25rem 1rem;
+  }
+
+  .login-dialog {
+    border-radius: var(--radius-lg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .login-dialog {
+    animation: none;
+  }
+}
+
+.account-menu-out-msg {
+  margin: 0.15rem 0.7rem 0.4rem;
+  color: var(--color-cream);
+}
+
+.account-menu-pop {
+  overflow: visible;
+}
+

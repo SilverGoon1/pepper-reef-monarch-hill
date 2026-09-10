@@ -12,6 +12,7 @@ export function AdminDrawer() {
   const [open, setOpen] = useState(false);
   const [unread, setUnread] = useState(0);
   const [outMsg, setOutMsg] = useState("");
+  const [signingOut, setSigningOut] = useState(false);
 
   useEffect(() => {
     setOpen(false);
@@ -97,13 +98,18 @@ export function AdminDrawer() {
         <button
           type="button"
           className="shop-nav-link admin-drawer-logout"
+          disabled={signingOut}
           onClick={() => {
             setOutMsg("");
-            void signOut("/").catch((e) => setOutMsg(e instanceof Error ? e.message : "Could not sign out"));
+            setSigningOut(true);
+            void signOut("/").catch((e) => {
+              setSigningOut(false);
+              setOutMsg(e instanceof Error ? e.message : "Could not sign out");
+            });
           }}
         >
           <LogOut size={16} strokeWidth={2.2} />
-          Log out
+          {signingOut ? "Signing out…" : "Log out"}
         </button>
         {outMsg ? <p className="ed-sub">{outMsg}</p> : null}
       </nav>

@@ -1,10 +1,9 @@
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { ChevronDown, CircleHelp, LogOut, Monitor, ShoppingBag, UserRound } from "lucide-react";
 import { BrandMark } from "@/components/brand-mark";
 import { SignedOut } from "@/lib/auth/gates";
 import { authEnabled, signOut } from "@/lib/auth/client";
-import { hasGateSessionMarker } from "@/lib/auth/gate-session-marker";
 import { useCurrentUserState, type AppUser } from "@/lib/auth/use-current-user";
 import { onAdminInbox } from "@/lib/admin-inbox";
 import { cartTotals, useCartStore } from "@/lib/cart-store";
@@ -12,9 +11,6 @@ import { onVisibleInterval } from "@/lib/page-visible";
 import { captureReferral, clearReferral, peekReferral } from "@/lib/referral";
 import { claimReferral, getAdminInboxCount } from "@/lib/shop-server";
 import type { ProfileView } from "@/lib/shop-types";
-
-const subscribeToNothing = () => () => {};
-const noGateSessionOnServer = () => false;
 
 function accountLabel(profile?: ProfileView | null, user?: AppUser | null) {
   const raw = String(profile?.displayName || user?.displayName || "").trim();
@@ -25,29 +21,31 @@ function accountLabel(profile?: ProfileView | null, user?: AppUser | null) {
   return "You";
 }
 
-function SignOutItem({ onDone }: { onDone: () => void }) {
+function SignOutItem() {
   const [signingOut, setSigningOut] = useState(false);
-  const gateSession = useSyncExternalStore(
-    subscribeToNothing,
-    hasGateSessionMarker,
-    noGateSessionOnServer,
-  );
-  if (!authEnabled || gateSession) return null;
+  const [outMsg, setOutMsg] = useState("");
+  if (!authEnabled) return null;
   return (
-    <button
-      type="button"
-      role="menuitem"
-      className="account-menu-out"
-      disabled={signingOut}
-      onClick={() => {
-        setSigningOut(true);
-        onDone();
-        void signOut().catch(() => setSigningOut(false));
-      }}
-    >
-      <LogOut size={16} strokeWidth={2.2} aria-hidden />
-      {signingOut ? "Signing out…" : "Sign out"}
-    </button>
+    <>
+      <button
+        type="button"
+        role="menuitem"
+        className="account-menu-out"
+        disabled={signingOut}
+        onClick={() => {
+          setSigningOut(true);
+          setOutMsg("");
+          void signOut().catch((e) => {
+            setSigningOut(false);
+            setOutMsg(e instanceof Error ? e.message : "Could not sign out. Try again.");
+          });
+        }}
+      >
+        <LogOut size={16} strokeWidth={2.2} aria-hidden />
+        {signingOut ? "Signing out…" : "Sign out"}
+      </button>
+      {outMsg ? <p className="ed-sub account-menu-out-msg">{outMsg}</p> : null}
+    </>
   );
 }
 
@@ -124,7 +122,7 @@ function AccountMenu({
               Shop admin
             </Link>
           ) : null}
-          <SignOutItem onDone={() => setOpen(false)} />
+          <SignOutItem />
         </div>
       ) : null}
     </div>

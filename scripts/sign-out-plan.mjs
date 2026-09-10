@@ -7,10 +7,11 @@
  * The two environments authenticate differently, so they need different
  * answers to "the server did not reply":
  *
- * - **Live preview** — a partitioned iframe with no readable session cookie;
- *   the session rides the bearer token in `sessionStorage`. Dropping that token
- *   IS being signed out, so the server call is best effort and a wedged request
- *   must never strand the button. This is where the hang actually happens.
+ * - **Live preview** — a partitioned iframe. Google/X ride a bearer token in
+ *   `sessionStorage`; email/password (the shop Admin desk login) is a same-
+ *   origin cookie. Both need a server sign-out. The wait is still bounded so a
+ *   wedged request cannot strand the button — after the wait we always drop
+ *   the local token and redirect.
  * - **Deployed** — the session rides an HttpOnly `__Host-` cookie that JS
  *   cannot delete. ONLY a completed sign-out response clears it, and
  *   `server.ts` enables `session.cookieCache` (maxAge 300), so `/get-session`
@@ -100,11 +101,10 @@ export async function runSignOut({
   timeoutMs,
 }) {
   if (livePreview) {
-    // No bearer means a partitioned iframe with nothing to invalidate; with one,
-    // still invalidate it server-side, just don't block on the answer.
-    if (hasBearer) {
-      await settleWithin(requestSignOut, timeoutMs ?? signOutTimeoutMs(livePreview));
-    }
+    // Always ask the server. A missing bearer used to skip this, which left
+    // email/password cookie sessions (shop Admin) signed in after redirect.
+    void hasBearer;
+    await settleWithin(requestSignOut, timeoutMs ?? signOutTimeoutMs(livePreview));
     clearToken();
     redirect();
     return;
@@ -152,9 +152,7 @@ export async function runPreSignInSignOut({
   clearToken,
   timeoutMs,
 }) {
-  // In the preview a missing bearer means there is nothing to clear.
-  if (hasBearer || !livePreview) {
-    await settleWithin(requestSignOut, timeoutMs ?? signOutTimeoutMs(livePreview));
-  }
+  void hasBearer;
+  await settleWithin(requestSignOut, timeoutMs ?? signOutTimeoutMs(livePreview));
   clearToken();
 }

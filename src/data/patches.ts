@@ -7,6 +7,23 @@ export type PatchEntry = {
 
 export const PATCHES: PatchEntry[] = [
   {
+    id: "2026-09-10-admin-sign-out",
+    date: "September 10, 2026",
+    title: "Admin can sign out",
+    added: [
+      "Signing out of the Admin desk login now ends the shop session instead of leaving you signed in.",
+    ],
+  },
+  {
+    id: "2026-09-10-login-popup-origin",
+    date: "September 10, 2026",
+    title: "A ticket-style sign-in card",
+    added: [
+      "Sign in is a shop ticket over the menu, with Google and X marked clearly.",
+      "Admin, Google, and X work on the published GitHub live shop, not only this preview.",
+    ],
+  },
+  {
     id: "2026-09-10-staff-admin",
     date: "September 10, 2026",
     title: "Shop admin sign-in",
