@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
@@ -19,6 +19,27 @@ export const Route = createFileRoute("/enroll-2fa")({
   component: Enroll2fa,
 });
 
+/** Survives remount storms — one in-flight setup per tab, shared across Enroll2fa mounts. */
+const setupCache: {
+  userId: string | null;
+  promise: Promise<{ secret: string; uri: string }> | null;
+} = { userId: null, promise: null };
+
+function loadTotpSetup(userId: string) {
+  if (setupCache.userId === userId && setupCache.promise) return setupCache.promise;
+  setupCache.userId = userId;
+  setupCache.promise = startTotpSetup()
+    .then((r) => ({ secret: r.secret, uri: r.uri }))
+    .catch((err) => {
+      if (setupCache.userId === userId) {
+        setupCache.userId = null;
+        setupCache.promise = null;
+      }
+      throw err;
+    });
+  return setupCache.promise;
+}
+
 function Enroll2fa() {
   const { user, isPending } = useCurrentUserState();
   const { next } = Route.useSearch();
@@ -29,20 +50,22 @@ function Enroll2fa() {
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
 
-  const setupStarted = useRef(false);
-
   useEffect(() => {
-    if (!user?.id || setupStarted.current) return;
-    setupStarted.current = true;
-    void startTotpSetup()
+    if (!user?.id) return;
+    let live = true;
+    void loadTotpSetup(user.id)
       .then((r) => {
+        if (!live) return;
         setSecret(r.secret);
         setUri(r.uri);
       })
       .catch((err) => {
-        setupStarted.current = false;
+        if (!live) return;
         setError(err instanceof Error ? err.message : "Could not start setup");
       });
+    return () => {
+      live = false;
+    };
   }, [user?.id]);
 
   if (isPending) return <div className="page-skel">Checking sign-in…</div>;

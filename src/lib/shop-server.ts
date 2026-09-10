@@ -1228,18 +1228,25 @@ export const getTwoFactorStatus = createServerFn({ method: "GET" }).middleware([
 export const startTotpSetup = createServerFn({ method: "POST" }).middleware([authMiddleware]).handler(async ({ context }) => {
 	const sql = await getSql();
 	await ensureProfile(sql, context.userId);
-	const row = (await sql`select totp_secret, totp_enabled from profiles where user_id = ${context.userId}`)[0];
-	// Reuse a pending secret so remounts / effect re-runs don't spam new keys mid-enroll.
-	if (row?.totp_secret && !bool(row?.totp_enabled)) {
-		const secret = String(row.totp_secret);
+	const existing = (await sql`select totp_secret, totp_enabled from profiles where user_id = ${context.userId}`)[0];
+	if (existing?.totp_secret) {
+		const secret = String(existing.totp_secret);
 		return { secret, uri: totpUri(secret, context.userId) };
 	}
-	if (bool(row?.totp_enabled) && row?.totp_secret) {
-		const secret = String(row.totp_secret);
-		return { secret, uri: totpUri(secret, context.userId) };
-	}
-	const secret = generateTotpSecret();
-	await sql`update profiles set totp_secret = ${secret} where user_id = ${context.userId}`;
+	// Mint at most once under concurrency: only the UPDATE that finds a NULL secret wins.
+	const minted = generateTotpSecret();
+	const written = await sql.query(
+		`update profiles set totp_secret = $1
+       where user_id = $2 and (totp_secret is null or totp_secret = '')
+       returning totp_secret`,
+		[minted, context.userId],
+	);
+	const secret = String(
+		written[0]?.totp_secret
+			?? (await sql`select totp_secret from profiles where user_id = ${context.userId}`)[0]?.totp_secret
+			?? "",
+	);
+	if (!secret) throw new Error("Could not start authenticator setup.");
 	return {
 		secret,
 		uri: totpUri(secret, context.userId)
